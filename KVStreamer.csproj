@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>KVStreamer</RootNamespace>
+    <AssemblyName>KVStreamer</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 包含示例CSV文件 -->
+    <None Include="Src\Example\example_data.csv" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Src\Example\chapter1.csv" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Unity相关文件排除编译 -->
+    <Compile Remove="Src\Unity\**\*.cs" />
+    <!-- Benchmark文件排除编译（需要单独运行） -->
+    <Compile Remove="Src\Benchmark\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+</Project>

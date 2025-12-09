@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RootNamespace>KVStreamer.Benchmark</RootNamespace>
+    <AssemblyName>KVStreamerBenchmark</AssemblyName>
+    <Nullable>disable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 引用核心类文件 -->
+    <Compile Include="..\KVStreamer.cs" Link="KVStreamer.cs" />
+    <Compile Include="..\ValueCache.cs" Link="ValueCache.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 包含测试数据文件 -->
+    <None Include="..\Example\chapter1.csv" CopyToOutputDirectory="PreserveNewest" Link="Src\Example\chapter1.csv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+  </ItemGroup>
+
+</Project>
