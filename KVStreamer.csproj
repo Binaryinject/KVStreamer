@@ -1,18 +1,40 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>netstandard2.0</TargetFramework>
     <RootNamespace>KVStreamer</RootNamespace>
     <AssemblyName>KVStreamer</AssemblyName>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
+    
+    <!-- NuGet Package Metadata -->
+    <PackageId>KVStreamer</PackageId>
+    <Version>1.0.0</Version>
+    <Authors>Binaryinject</Authors>
+    <Company>Binaryinject</Company>
+    <Product>KVStreamer</Product>
+    <Description>A high-performance C# library for Unity that provides streaming key-value pair reading with GZip compression support. Supports generating compact binary format from CSV files and features an intelligent cache system with time control.</Description>
+    <PackageTags>Unity;CSV;Binary;KeyValue;Streaming;Cache;Performance;GZip;Compression</PackageTags>
+    <PackageProjectUrl>https://github.com/Binaryinject/KVStreamer</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Binaryinject/KVStreamer</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
+    <PackageReleaseNotes>Initial release with GZip compression support:
+- CSV to binary conversion
+- GZip compression (60-70% size reduction)
+- Map header indexing for fast lookup
+- Smart caching system
+- Thread-safe operations
+- Zero GC pressure
+- Backward compatible</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- 包含示例CSV文件 -->
-    <None Include="Src\Example\example_data.csv" CopyToOutputDirectory="PreserveNewest" />
-    <None Include="Src\Example\chapter1.csv" CopyToOutputDirectory="PreserveNewest" />
+    <!-- Include README in package -->
+    <None Include="README.md" Pack="true" PackagePath="/" />
   </ItemGroup>
 
   <ItemGroup>
@@ -20,10 +42,14 @@
     <Compile Remove="Src\Unity\**\*.cs" />
     <!-- Benchmark文件排除编译（需要单独运行） -->
     <Compile Remove="Src\Benchmark\**\*.cs" />
+    <!-- Example文件排除编译 -->
+    <Compile Remove="Src\Example\**\*.cs" />
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <!-- Example和Benchmark的文件不包含在包中 -->
+    <None Remove="Src\Example\**\*" />
+    <None Remove="Src\Benchmark\**\*" />
   </ItemGroup>
 
 </Project>
