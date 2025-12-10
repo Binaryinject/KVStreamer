@@ -87,7 +87,7 @@ npc_001,Village chief dialogue text,NPC dialogue
 ### 2. Generate Binary File from CSV
 
 ```csharp
-using KVStreamer;
+using FSTGame;
 
 // Create KVStreamer instance
 using (KVStreamer streamer = new KVStreamer())
@@ -103,6 +103,8 @@ using (KVStreamer streamer = new KVStreamer())
 ### 3. Load and Read Data
 
 ```csharp
+using FSTGame;
+
 using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300 seconds cache
 {
     // Method 1: Load from file path
@@ -234,7 +236,7 @@ Get total number of key-value pairs.
 
 ```csharp
 using UnityEngine;
-using KVStreamer;
+using FSTGame;
 
 public class LocalizationManager : MonoBehaviour
 {

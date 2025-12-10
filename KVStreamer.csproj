@@ -2,14 +2,14 @@
 
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
-    <RootNamespace>KVStreamer</RootNamespace>
+    <RootNamespace>FSTGame</RootNamespace>
     <AssemblyName>KVStreamer</AssemblyName>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
     
     <!-- NuGet Package Metadata -->
     <PackageId>KVStreamer</PackageId>
-    <Version>1.0.0</Version>
+    <Version>1.1.0</Version>
     <Authors>Binaryinject</Authors>
     <Company>Binaryinject</Company>
     <Product>KVStreamer</Product>
@@ -22,14 +22,14 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
-    <PackageReleaseNotes>Initial release with GZip compression support:
-- CSV to binary conversion
+    <PackageReleaseNotes>Version 1.1.0:
+- Change namespace to FSTGame
+- Maintain backward compatibility with same assembly name
 - GZip compression (60-70% size reduction)
 - Map header indexing for fast lookup
 - Smart caching system
 - Thread-safe operations
-- Zero GC pressure
-- Backward compatible</PackageReleaseNotes>
+- Zero GC pressure</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

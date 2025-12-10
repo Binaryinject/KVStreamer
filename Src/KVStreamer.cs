@@ -4,7 +4,7 @@ using System.IO;
 using System.IO.Compression;
 using System.Text;
 
-namespace KVStreamer
+namespace FSTGame
 {
     /// <summary>
     /// KV流式读取器主类

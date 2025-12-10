@@ -87,7 +87,7 @@ npc_001,村长对话文本,NPC对话
 ### 2. 从CSV生成二进制文件
 
 ```csharp
-using KVStreamer;
+using FSTGame;
 
 // 创建KVStreamer实例
 using (KVStreamer streamer = new KVStreamer())
@@ -103,6 +103,8 @@ using (KVStreamer streamer = new KVStreamer())
 ### 3. 加载并读取数据
 
 ```csharp
+using FSTGame;
+
 using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300秒缓存
 {
     // 方式1: 从文件路径加载
@@ -234,7 +236,7 @@ int Count { get; }
 
 ```csharp
 using UnityEngine;
-using KVStreamer;
+using FSTGame;
 
 public class LocalizationManager : MonoBehaviour
 {

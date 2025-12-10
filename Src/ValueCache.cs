@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace KVStreamer
+namespace FSTGame
 {
     /// <summary>
     /// 带时间控制的值缓存系统
