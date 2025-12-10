@@ -7,12 +7,14 @@ A high-performance C# library for Unity that provides streaming key-value pair r
 ## ✨ Features
 
 - 📝 **CSV to Binary Conversion**: Generate optimized binary files from CSV files (ID column as key, Text column as value)
+- 🗜️ **GZip Compression**: Built-in GZip compression support, reduces file size by 60-70% (default enabled)
 - 🗺️ **Map Header Indexing**: Binary files include map headers for fast key-value lookup
 - 🚀 **Streaming Read**: Read using MemoryStream, supports byte[] input, perfect for Unity resource system
 - 💾 **Smart Caching**: Cache system with expiration time, automatically cleans up expired data
 - 🎯 **Memory Optimized**: On-demand value reading, minimizes memory footprint
 - 🔒 **Thread Safe**: File read operations protected with locks
 - ⚡ **Excellent Performance**: Low GC pressure, suitable for mobile platforms and large datasets
+- 🔄 **Backward Compatible**: Automatically detects and loads both compressed and uncompressed formats
 
 ## 📦 Project Structure
 
@@ -31,15 +33,17 @@ KVStreamer/
 The generated .bytes file format is as follows:
 
 ```
-[Map Header Size (4 bytes)]
-[Map Header Data]
-    ├── [Key1 Length (4 bytes)][Key1 String][Value1 Offset (8 bytes)]
-    ├── [Key2 Length (4 bytes)][Key2 String][Value2 Offset (8 bytes)]
-    └── ...
-[Value Data]
-    ├── [Value1 Length (4 bytes)][Value1 String]
-    ├── [Value2 Length (4 bytes)][Value2 String]
-    └── ...
+[Compression Flag (1 byte)]  # 0xC0 = Compressed, 0x00 = Uncompressed
+[Compressed/Uncompressed Data]
+    ├── [Map Header Size (4 bytes)]
+    ├── [Map Header Data]
+    │   ├── [Key1 Length (4 bytes)][Key1 String][Value1 Offset (8 bytes)]
+    │   ├── [Key2 Length (4 bytes)][Key2 String][Value2 Offset (8 bytes)]
+    │   └── ...
+    └── [Value Data]
+        ├── [Value1 Length (4 bytes)][Value1 String]
+        ├── [Value2 Length (4 bytes)][Value2 String]
+        └── ...
 ```
 
 ## 🚀 Quick Start
@@ -63,8 +67,11 @@ using KVStreamer;
 // Create KVStreamer instance
 using (KVStreamer streamer = new KVStreamer())
 {
-    // Generate binary file from CSV
+    // Generate compressed binary file (default)
     streamer.CreateBinaryFromCSV("data.csv", "data.bytes");
+    
+    // Or generate uncompressed file
+    streamer.CreateBinaryFromCSV("data.csv", "data.bytes", compress: false);
 }
 ```
 
@@ -101,17 +108,23 @@ KVStreamer(float cacheDuration = 300f)
 
 ##### CreateBinaryFromCSV
 ```csharp
-void CreateBinaryFromCSV(string csvPath, string outputPath)
+void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
 ```
-Create binary file from CSV file.
+Create binary file from CSV file with optional compression.
 
 **Parameters:**
 - `csvPath`: CSV file path
 - `outputPath`: Output .bytes file path
+- `compress`: Enable GZip compression (default: true)
 
 **Exceptions:**
 - `FileNotFoundException`: CSV file does not exist
 - `Exception`: CSV format error (missing ID or Text column)
+
+**Compression Benefits:**
+- Small files (12 records): ~36% compression rate
+- Large files (1,368 records): ~67% compression rate (3:1 ratio)
+- Automatic decompression on load
 
 ##### LoadBinaryFile
 ```csharp
@@ -129,13 +142,15 @@ Load binary file from file path and parse map header.
 ```csharp
 void LoadBinaryData(byte[] binaryData)
 ```
-Load binary data from byte array (Recommended for Unity).
+Load binary data from byte array (Recommended for Unity). Automatically detects and decompresses GZip-compressed data.
 
 **Parameters:**
-- `binaryData`: Binary data byte array
+- `binaryData`: Binary data byte array (compressed or uncompressed)
 
 **Exceptions:**
 - `ArgumentException`: Data is null or empty
+
+**Note:** This method automatically handles both compressed and uncompressed formats for backward compatibility.
 
 ##### GetValue
 ```csharp

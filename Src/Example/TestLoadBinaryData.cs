@@ -8,8 +8,15 @@ namespace KVStreamer.Example
     /// </summary>
     class TestLoadBinaryData
     {
-        static void TestMain(string[] args)
+        public static void TestLoadBinaryDataMethod(string[] args)
         {
+            // 如果传入 "chapter1" 参数，使用大文件测试
+            if (args.Length > 1 && args[1] == "chapter1")
+            {
+                TestLargeFileCompression();
+                return;
+            }
+            
             Console.WriteLine("=== 测试 LoadBinaryData (byte[] 输入) ===\n");
 
             string csvPath = "Src/Example/example_data.csv";
@@ -17,13 +24,26 @@ namespace KVStreamer.Example
 
             try
             {
-                // 步骤1: 创建二进制文件
+                // 步骤1: 创建二进制文件（压缩和未压缩）
                 Console.WriteLine("1. 创建二进制文件...");
+                string compressedPath = "Src/Example/test_compressed.bytes";
+                string uncompressedPath = "Src/Example/test_uncompressed.bytes";
+                
                 using (var streamer = new KVStreamer())
                 {
-                    streamer.CreateBinaryFromCSV(csvPath, binaryPath);
-                    Console.WriteLine($"   ✓ 成功创建: {binaryPath}\n");
+                    streamer.CreateBinaryFromCSV(csvPath, compressedPath, compress: true);
+                    FileInfo compressedInfo = new FileInfo(compressedPath);
+                    Console.WriteLine($"   ✓ 压缩版: {compressedPath} ({compressedInfo.Length} 字节)");
+                    
+                    streamer.CreateBinaryFromCSV(csvPath, uncompressedPath, compress: false);
+                    FileInfo uncompressedInfo = new FileInfo(uncompressedPath);
+                    Console.WriteLine($"   ✓ 未压缩: {uncompressedPath} ({uncompressedInfo.Length} 字节)");
+                    
+                    double ratio = (1 - (double)compressedInfo.Length / uncompressedInfo.Length) * 100;
+                    Console.WriteLine($"   压缩率: {ratio:F1}%\n");
                 }
+                
+                binaryPath = compressedPath; // 使用压缩版本进行后续测试
 
                 // 步骤2: 读取文件到byte[]
                 Console.WriteLine("2. 读取文件到byte[]...");
@@ -125,6 +145,121 @@ namespace KVStreamer.Example
             catch (Exception ex)
             {
                 Console.WriteLine($"\n✗ 错误: {ex.Message}");
+                Console.WriteLine($"详情: {ex.StackTrace}");
+            }
+
+            Console.WriteLine("\n按任意键退出...");
+            Console.ReadKey();
+        }
+        
+        static void TestLargeFileCompression()
+        {
+            Console.WriteLine("=== 大文件压缩效果测试 ===\n");
+
+            string csvPath = "Src/Example/chapter1.csv";
+            string compressedPath = "Src/Example/chapter1_compressed.bytes";
+            string uncompressedPath = "Src/Example/chapter1_uncompressed.bytes";
+
+            try
+            {
+                // 创建压缩版本
+                Console.WriteLine("正在生成压缩版本...");
+                using (KVStreamer streamer = new KVStreamer())
+                {
+                    var startTime = DateTime.Now;
+                    streamer.CreateBinaryFromCSV(csvPath, compressedPath, compress: true);
+                    var elapsed = (DateTime.Now - startTime).TotalMilliseconds;
+                    FileInfo compressedInfo = new FileInfo(compressedPath);
+                    Console.WriteLine($"✓ 压缩版本生成成功");
+                    Console.WriteLine($"  文件大小: {compressedInfo.Length:N0} 字节 ({compressedInfo.Length / 1024.0:F2} KB)");
+                    Console.WriteLine($"  生成耗时: {elapsed:F2} ms\n");
+                }
+
+                // 创建未压缩版本
+                Console.WriteLine("正在生成未压缩版本...");
+                using (KVStreamer streamer = new KVStreamer())
+                {
+                    var startTime = DateTime.Now;
+                    streamer.CreateBinaryFromCSV(csvPath, uncompressedPath, compress: false);
+                    var elapsed = (DateTime.Now - startTime).TotalMilliseconds;
+                    FileInfo uncompressedInfo = new FileInfo(uncompressedPath);
+                    Console.WriteLine($"✓ 未压缩版本生成成功");
+                    Console.WriteLine($"  文件大小: {uncompressedInfo.Length:N0} 字节 ({uncompressedInfo.Length / 1024.0:F2} KB)");
+                    Console.WriteLine($"  生成耗时: {elapsed:F2} ms\n");
+                }
+
+                // 对比结果
+                FileInfo compressed = new FileInfo(compressedPath);
+                FileInfo uncompressed = new FileInfo(uncompressedPath);
+                
+                Console.WriteLine("=== 压缩效果对比 ===");
+                Console.WriteLine($"未压缩大小: {uncompressed.Length:N0} 字节 ({uncompressed.Length / 1024.0:F2} KB)");
+                Console.WriteLine($"压缩后大小: {compressed.Length:N0} 字节 ({compressed.Length / 1024.0:F2} KB)");
+                Console.WriteLine($"节省空间:   {uncompressed.Length - compressed.Length:N0} 字节 ({(uncompressed.Length - compressed.Length) / 1024.0:F2} KB)");
+                
+                double compressionRatio = (1 - (double)compressed.Length / uncompressed.Length) * 100;
+                Console.WriteLine($"压缩率:     {compressionRatio:F2}%");
+                Console.WriteLine($"压缩比:     {(double)uncompressed.Length / compressed.Length:F2}:1\n");
+
+                // 测试加载速度
+                Console.WriteLine("=== 加载速度测试 ===");
+                
+                // 测试压缩版本加载
+                var startLoad = DateTime.Now;
+                using (KVStreamer streamer = new KVStreamer())
+                {
+                    streamer.LoadBinaryFile(compressedPath);
+                    var loadTime = (DateTime.Now - startLoad).TotalMilliseconds;
+                    Console.WriteLine($"压缩版本加载时间: {loadTime:F2} ms (共 {streamer.Count:N0} 条数据)");
+                }
+
+                // 测试未压缩版本加载
+                startLoad = DateTime.Now;
+                using (KVStreamer streamer = new KVStreamer())
+                {
+                    streamer.LoadBinaryFile(uncompressedPath);
+                    var loadTime = (DateTime.Now - startLoad).TotalMilliseconds;
+                    Console.WriteLine($"未压缩版本加载时间: {loadTime:F2} ms (共 {streamer.Count:N0} 条数据)\n");
+                }
+
+                // 验证数据正确性
+                Console.WriteLine("=== 数据正确性验证 ===");
+                using (KVStreamer streamer1 = new KVStreamer())
+                using (KVStreamer streamer2 = new KVStreamer())
+                {
+                    streamer1.LoadBinaryFile(compressedPath);
+                    streamer2.LoadBinaryFile(uncompressedPath);
+
+                    var keys = streamer1.GetAllKeys();
+                    bool allMatch = true;
+                    int checkedCount = 0;
+
+                    foreach (var key in keys)
+                    {
+                        string value1 = streamer1.GetValue(key);
+                        string value2 = streamer2.GetValue(key);
+                        
+                        if (value1 != value2)
+                        {
+                            Console.WriteLine($"✗ 数据不匹配: {key}");
+                            allMatch = false;
+                        }
+                        checkedCount++;
+                        
+                        if (checkedCount >= 100) break; // 检查前100条
+                    }
+
+                    if (allMatch)
+                    {
+                        Console.WriteLine($"✓ 验证通过，压缩和未压缩数据完全一致 (检查了 {checkedCount:N0} 条数据)");
+                    }
+                }
+
+                Console.WriteLine("\n=== 测试完成 ===");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"错误: {ex.Message}");
                 Console.WriteLine($"详情: {ex.StackTrace}");
             }
 

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 namespace KVStreamer.Example
 {
@@ -10,20 +11,43 @@ namespace KVStreamer.Example
     {
         static void Main(string[] args)
         {
+            // 如果传入参数 "test-compression"，运行压缩测试
+            if (args.Length > 0 && args[0] == "test-compression")
+            {
+                TestLoadBinaryData.TestLoadBinaryDataMethod(args);
+                return;
+            }
+            
             Console.WriteLine("=== KVStreamer 示例程序 ===\n");
 
             // 文件路径
             string csvPath = "Src/Example/example_data.csv";
             string binaryPath = "Src/Example/data.bytes";
+            string binaryPathUncompressed = "Src/Example/data_uncompressed.bytes";
 
             try
             {
-                // 示例1: 从CSV创建二进制文件
-                Console.WriteLine("1. 从CSV创建二进制文件...");
+                // 示例1: 从CSV创建二进制文件（压缩）
+                Console.WriteLine("1. 从CSV创建二进制文件（压缩）...");
                 using (KVStreamer streamer = new KVStreamer())
                 {
-                    streamer.CreateBinaryFromCSV(csvPath, binaryPath);
-                    Console.WriteLine($"   ✓ 成功创建: {binaryPath}\n");
+                    streamer.CreateBinaryFromCSV(csvPath, binaryPath, compress: true);
+                    FileInfo compressedInfo = new FileInfo(binaryPath);
+                    Console.WriteLine($"   ✓ 成功创建: {binaryPath}");
+                    Console.WriteLine($"   文件大小: {compressedInfo.Length} 字节\n");
+                }
+
+                // 示例1b: 创建未压缩版本进行对比
+                Console.WriteLine("1b. 从CSV创建二进制文件（未压缩）...");
+                using (KVStreamer streamer = new KVStreamer())
+                {
+                    streamer.CreateBinaryFromCSV(csvPath, binaryPathUncompressed, compress: false);
+                    FileInfo uncompressedInfo = new FileInfo(binaryPathUncompressed);
+                    FileInfo compressedInfo = new FileInfo(binaryPath);
+                    Console.WriteLine($"   ✓ 成功创建: {binaryPathUncompressed}");
+                    Console.WriteLine($"   文件大小: {uncompressedInfo.Length} 字节");
+                    double compressionRatio = (1 - (double)compressedInfo.Length / uncompressedInfo.Length) * 100;
+                    Console.WriteLine($"   压缩率: {compressionRatio:F1}% (压缩后减少了 {uncompressedInfo.Length - compressedInfo.Length} 字节)\n");
                 }
 
                 // 示例2: 加载二进制文件并读取数据

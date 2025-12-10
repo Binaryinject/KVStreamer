@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 
 namespace KVStreamer
@@ -14,6 +15,8 @@ namespace KVStreamer
         private Dictionary<string, long> _keyOffsetMap;
         private ValueCache _cache;
         private bool _disposed = false;
+        private const byte MAGIC_COMPRESSED = 0xC0; // 压缩标志
+        private const byte MAGIC_UNCOMPRESSED = 0x00; // 未压缩标志
 
         /// <summary>
         /// 构造函数
@@ -32,7 +35,8 @@ namespace KVStreamer
         /// </summary>
         /// <param name="csvPath">CSV文件路径</param>
         /// <param name="outputPath">输出的.bytes文件路径</param>
-        public void CreateBinaryFromCSV(string csvPath, string outputPath)
+        /// <param name="compress">是否压缩，默认为true</param>
+        public void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
         {
             if (!File.Exists(csvPath))
             {
@@ -40,7 +44,7 @@ namespace KVStreamer
             }
 
             var kvPairs = ParseCSV(csvPath);
-            GenerateBinaryFile(kvPairs, outputPath);
+            GenerateBinaryFile(kvPairs, outputPath, compress);
         }
 
         /// <summary>
@@ -136,55 +140,83 @@ namespace KVStreamer
 
         /// <summary>
         /// 生成二进制文件
-        /// 格式: [Map头大小(4字节)][Map头数据][Value数据]
+        /// 格式: [压缩标志(1字节)][Map头大小(4字节)][Map头数据][Value数据]
         /// Map头: 每个条目 [Key长度(4)][Key字符串][Value偏移量(8)]
         /// </summary>
-        private void GenerateBinaryFile(Dictionary<string, string> kvPairs, string outputPath)
+        private void GenerateBinaryFile(Dictionary<string, string> kvPairs, string outputPath, bool compress)
         {
-            using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
-            using (BinaryWriter writer = new BinaryWriter(fs, Encoding.UTF8))
+            using (MemoryStream ms = new MemoryStream())
             {
-                // 第一遍：计算偏移量
-                Dictionary<string, long> offsetMap = new Dictionary<string, long>();
-                long currentOffset = 0;
-
-                // 先计算map头的大小
-                int mapHeaderSize = 4; // map头大小字段本身
-                foreach (var kvp in kvPairs)
+                using (BinaryWriter writer = new BinaryWriter(ms, Encoding.UTF8, true))
                 {
-                    byte[] keyBytes = Encoding.UTF8.GetBytes(kvp.Key);
-                    mapHeaderSize += 4 + keyBytes.Length + 8; // key长度 + key + offset
+                    // 第一遍：计算偏移量
+                    Dictionary<string, long> offsetMap = new Dictionary<string, long>();
+                    long currentOffset = 0;
+
+                    // 先计算map头的大小
+                    int mapHeaderSize = 4; // map头大小字段本身
+                    foreach (var kvp in kvPairs)
+                    {
+                        byte[] keyBytes = Encoding.UTF8.GetBytes(kvp.Key);
+                        mapHeaderSize += 4 + keyBytes.Length + 8; // key长度 + key + offset
+                    }
+
+                    // value数据从map头之后开始
+                    currentOffset = mapHeaderSize;
+
+                    foreach (var kvp in kvPairs)
+                    {
+                        offsetMap[kvp.Key] = currentOffset;
+                        byte[] valueBytes = Encoding.UTF8.GetBytes(kvp.Value);
+                        currentOffset += 4 + valueBytes.Length; // value长度 + value
+                    }
+
+                    // 第二遍：写入数据
+                    // 写入map头大小
+                    writer.Write(mapHeaderSize);
+
+                    // 写入map头
+                    foreach (var kvp in kvPairs)
+                    {
+                        byte[] keyBytes = Encoding.UTF8.GetBytes(kvp.Key);
+                        writer.Write(keyBytes.Length);
+                        writer.Write(keyBytes);
+                        writer.Write(offsetMap[kvp.Key]);
+                    }
+
+                    // 写入value数据
+                    foreach (var kvp in kvPairs)
+                    {
+                        byte[] valueBytes = Encoding.UTF8.GetBytes(kvp.Value);
+                        writer.Write(valueBytes.Length);
+                        writer.Write(valueBytes);
+                    }
                 }
 
-                // value数据从map头之后开始
-                currentOffset = mapHeaderSize;
+                // 获取未压缩的数据
+                byte[] uncompressedData = ms.ToArray();
 
-                foreach (var kvp in kvPairs)
+                // 写入文件
+                using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
                 {
-                    offsetMap[kvp.Key] = currentOffset;
-                    byte[] valueBytes = Encoding.UTF8.GetBytes(kvp.Value);
-                    currentOffset += 4 + valueBytes.Length; // value长度 + value
-                }
-
-                // 第二遍：写入数据
-                // 写入map头大小
-                writer.Write(mapHeaderSize);
-
-                // 写入map头
-                foreach (var kvp in kvPairs)
-                {
-                    byte[] keyBytes = Encoding.UTF8.GetBytes(kvp.Key);
-                    writer.Write(keyBytes.Length);
-                    writer.Write(keyBytes);
-                    writer.Write(offsetMap[kvp.Key]);
-                }
-
-                // 写入value数据
-                foreach (var kvp in kvPairs)
-                {
-                    byte[] valueBytes = Encoding.UTF8.GetBytes(kvp.Value);
-                    writer.Write(valueBytes.Length);
-                    writer.Write(valueBytes);
+                    if (compress)
+                    {
+                        // 写入压缩标志
+                        fs.WriteByte(MAGIC_COMPRESSED);
+                        
+                        // 使用GZip压缩
+                        using (GZipStream gzipStream = new GZipStream(fs, CompressionMode.Compress, true))
+                        {
+                            gzipStream.Write(uncompressedData, 0, uncompressedData.Length);
+                        }
+                    }
+                    else
+                    {
+                        // 写入未压缩标志
+                        fs.WriteByte(MAGIC_UNCOMPRESSED);
+                        // 直接写入原始数据
+                        fs.Write(uncompressedData, 0, uncompressedData.Length);
+                    }
                 }
             }
         }
@@ -222,11 +254,46 @@ namespace KVStreamer
             // 关闭旧的数据流
             CloseDataStream();
 
+            // 检查压缩标志
+            byte magicByte = binaryData[0];
+            byte[] actualData;
+
+            if (magicByte == MAGIC_COMPRESSED)
+            {
+                // 解压缩数据
+                actualData = DecompressData(binaryData, 1);
+            }
+            else if (magicByte == MAGIC_UNCOMPRESSED)
+            {
+                // 未压缩数据，跳过标志字节
+                actualData = new byte[binaryData.Length - 1];
+                Array.Copy(binaryData, 1, actualData, 0, actualData.Length);
+            }
+            else
+            {
+                // 兼容旧格式（无标志字节）
+                actualData = binaryData;
+            }
+
             // 创建内存流
-            _dataStream = new MemoryStream(binaryData, false);
+            _dataStream = new MemoryStream(actualData, false);
 
             // 解析map头
             ParseMapHeader();
+        }
+
+        /// <summary>
+        /// 解压缩数据
+        /// </summary>
+        private byte[] DecompressData(byte[] compressedData, int offset)
+        {
+            using (MemoryStream inputStream = new MemoryStream(compressedData, offset, compressedData.Length - offset))
+            using (GZipStream gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
+            using (MemoryStream outputStream = new MemoryStream())
+            {
+                gzipStream.CopyTo(outputStream);
+                return outputStream.ToArray();
+            }
         }
 
         /// <summary>
