@@ -1,194 +1,196 @@
 # KVStreamer
 
-一个用于Unity的高性能键值对流式读取C#库，支持从CSV文件生成紧凑的二进制格式，并提供带时间控制的智能缓存系统。
+[中文](./README_CN.md) | English
 
-## ✨ 特性
+A high-performance C# library for Unity that provides streaming key-value pair reading, supports generating compact binary format from CSV files, and features an intelligent cache system with time control.
 
-- 📝 **CSV到二进制转换**: 从CSV文件（ID列为key，Text列为value）生成优化的二进制文件
-- 🗺️ **Map头索引**: 二进制文件包含Map头，实现快速的键值查找
-- 🚀 **流式读取**: 使用MemoryStream读取，支持byte[]输入，适合Unity资源系统
-- 💾 **智能缓存**: 带过期时间的缓存系统，自动清理过期数据
-- 🎯 **内存优化**: 按需读取value，最小化内存占用
-- 🔒 **线程安全**: 文件读取操作使用lock保护
-- ⚡ **性能出色**: GC压力低，适合移动平台和大数据量场景
+## ✨ Features
 
-## 📦 项目结构
+- 📝 **CSV to Binary Conversion**: Generate optimized binary files from CSV files (ID column as key, Text column as value)
+- 🗺️ **Map Header Indexing**: Binary files include map headers for fast key-value lookup
+- 🚀 **Streaming Read**: Read using MemoryStream, supports byte[] input, perfect for Unity resource system
+- 💾 **Smart Caching**: Cache system with expiration time, automatically cleans up expired data
+- 🎯 **Memory Optimized**: On-demand value reading, minimizes memory footprint
+- 🔒 **Thread Safe**: File read operations protected with locks
+- ⚡ **Excellent Performance**: Low GC pressure, suitable for mobile platforms and large datasets
+
+## 📦 Project Structure
 
 ```
 KVStreamer/
-├── KVStreamer.cs          # 主类，提供所有核心API
-├── ValueCache.cs          # 值缓存系统
+├── KVStreamer.cs          # Main class, provides all core APIs
+├── ValueCache.cs          # Value cache system
 ├── Example/
-│   ├── example_data.csv   # 示例CSV数据文件
-│   └── Program.cs         # 使用示例代码
+│   ├── example_data.csv   # Sample CSV data file
+│   └── Program.cs         # Example usage code
 └── README.md
 ```
 
-## 🔧 二进制文件格式
+## 🔧 Binary File Format
 
-生成的.bytes文件格式如下：
+The generated .bytes file format is as follows:
 
 ```
-[Map头大小(4字节)]
-[Map头数据]
-    ├── [Key1长度(4字节)][Key1字符串][Value1偏移量(8字节)]
-    ├── [Key2长度(4字节)][Key2字符串][Value2偏移量(8字节)]
+[Map Header Size (4 bytes)]
+[Map Header Data]
+    ├── [Key1 Length (4 bytes)][Key1 String][Value1 Offset (8 bytes)]
+    ├── [Key2 Length (4 bytes)][Key2 String][Value2 Offset (8 bytes)]
     └── ...
-[Value数据]
-    ├── [Value1长度(4字节)][Value1字符串]
-    ├── [Value2长度(4字节)][Value2字符串]
+[Value Data]
+    ├── [Value1 Length (4 bytes)][Value1 String]
+    ├── [Value2 Length (4 bytes)][Value2 String]
     └── ...
 ```
 
-## 🚀 快速开始
+## 🚀 Quick Start
 
-### 1. 准备CSV文件
+### 1. Prepare CSV File
 
-创建一个CSV文件，必须包含`ID`和`Text`两列：
+Create a CSV file that must contain `ID` and `Text` columns:
 
 ```csv
 ID,Text,Description
-item_001,这是第一个物品,物品描述1
-item_002,这是第二个物品,物品描述2
-npc_001,村长对话文本,NPC对话
+item_001,This is the first item,Item description 1
+item_002,This is the second item,Item description 2
+npc_001,Village chief dialogue text,NPC dialogue
 ```
 
-### 2. 从CSV生成二进制文件
+### 2. Generate Binary File from CSV
 
 ```csharp
 using KVStreamer;
 
-// 创建KVStreamer实例
+// Create KVStreamer instance
 using (KVStreamer streamer = new KVStreamer())
 {
-    // 从CSV生成二进制文件
+    // Generate binary file from CSV
     streamer.CreateBinaryFromCSV("data.csv", "data.bytes");
 }
 ```
 
-### 3. 加载并读取数据
+### 3. Load and Read Data
 
 ```csharp
-using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300秒缓存
+using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300 seconds cache
 {
-    // 方式1: 从文件路径加载
+    // Method 1: Load from file path
     streamer.LoadBinaryFile("data.bytes");
     
-    // 方式2: 从byte[]加载（Unity推荐）
+    // Method 2: Load from byte[] (Recommended for Unity)
     byte[] data = File.ReadAllBytes("data.bytes");
     streamer.LoadBinaryData(data);
     
-    // 通过Key获取Value
+    // Get value by key
     string text = streamer.GetValue("item_001");
-    Console.WriteLine(text); // 输出: 这是第一个物品
+    Console.WriteLine(text); // Output: This is the first item
 }
 ```
 
-## 📚 API文档
+## 📚 API Documentation
 
-### KVStreamer 主类
+### KVStreamer Main Class
 
-#### 构造函数
+#### Constructor
 
 ```csharp
 KVStreamer(float cacheDuration = 300f)
 ```
-- `cacheDuration`: 缓存持续时间（秒），默认300秒
+- `cacheDuration`: Cache duration in seconds, default is 300 seconds
 
-#### 方法
+#### Methods
 
 ##### CreateBinaryFromCSV
 ```csharp
 void CreateBinaryFromCSV(string csvPath, string outputPath)
 ```
-从CSV文件创建二进制文件。
+Create binary file from CSV file.
 
-**参数:**
-- `csvPath`: CSV文件路径
-- `outputPath`: 输出的.bytes文件路径
+**Parameters:**
+- `csvPath`: CSV file path
+- `outputPath`: Output .bytes file path
 
-**异常:**
-- `FileNotFoundException`: CSV文件不存在
-- `Exception`: CSV格式错误（缺少ID或Text列）
+**Exceptions:**
+- `FileNotFoundException`: CSV file does not exist
+- `Exception`: CSV format error (missing ID or Text column)
 
 ##### LoadBinaryFile
 ```csharp
 void LoadBinaryFile(string binaryFilePath)
 ```
-从文件路径加载二进制文件并解析Map头。
+Load binary file from file path and parse map header.
 
-**参数:**
-- `binaryFilePath`: .bytes文件路径
+**Parameters:**
+- `binaryFilePath`: .bytes file path
 
-**异常:**
-- `FileNotFoundException`: 二进制文件不存在
+**Exceptions:**
+- `FileNotFoundException`: Binary file does not exist
 
 ##### LoadBinaryData
 ```csharp
 void LoadBinaryData(byte[] binaryData)
 ```
-从字节数组加载二进制数据（Unity推荐方式）。
+Load binary data from byte array (Recommended for Unity).
 
-**参数:**
-- `binaryData`: 二进制数据字节数组
+**Parameters:**
+- `binaryData`: Binary data byte array
 
-**异常:**
-- `ArgumentException`: 数据为null或空
+**Exceptions:**
+- `ArgumentException`: Data is null or empty
 
 ##### GetValue
 ```csharp
 string GetValue(string key)
 ```
-通过Key获取Value（带缓存）。
+Get value by key (with caching).
 
-**参数:**
-- `key`: 键
+**Parameters:**
+- `key`: Key
 
-**返回:**
-- 对应的值，如果不存在返回`null`
+**Returns:**
+- Corresponding value, returns `null` if not found
 
 ##### GetAllKeys
 ```csharp
 List<string> GetAllKeys()
 ```
-获取所有的Key列表。
+Get list of all keys.
 
-**返回:**
-- 所有key的列表
+**Returns:**
+- List of all keys
 
 ##### ContainsKey
 ```csharp
 bool ContainsKey(string key)
 ```
-检查Key是否存在。
+Check if key exists.
 
-**参数:**
-- `key`: 要检查的键
+**Parameters:**
+- `key`: Key to check
 
-**返回:**
-- 存在返回`true`，否则返回`false`
+**Returns:**
+- Returns `true` if exists, otherwise `false`
 
 ##### ClearCache
 ```csharp
 void ClearCache()
 ```
-清除所有缓存。
+Clear all cache.
 
 ##### CloseBinaryFile
 ```csharp
 void CloseBinaryFile()
 ```
-关闭二进制文件流。
+Close binary file stream.
 
-#### 属性
+#### Properties
 
 ##### Count
 ```csharp
 int Count { get; }
 ```
-获取键值对总数。
+Get total number of key-value pairs.
 
-## 🎮 Unity使用示例
+## 🎮 Unity Usage Example
 
 ```csharp
 using UnityEngine;
@@ -200,17 +202,17 @@ public class LocalizationManager : MonoBehaviour
     
     void Start()
     {
-        // 创建实例，缓存5分钟
+        // Create instance, cache for 5 minutes
         _streamer = new KVStreamer(cacheDuration: 300f);
         
-        // 加载二进制文件（放在StreamingAssets或Resources文件夹）
+        // Load binary file (place in StreamingAssets or Resources folder)
         string path = Application.streamingAssetsPath + "/localization.bytes";
         _streamer.LoadBinaryFile(path);
         
-        Debug.Log($"加载了 {_streamer.Count} 条本地化文本");
+        Debug.Log($"Loaded {_streamer.Count} localization texts");
     }
     
-    // 获取本地化文本
+    // Get localized text
     public string GetText(string key)
     {
         return _streamer?.GetValue(key) ?? key;
@@ -218,142 +220,141 @@ public class LocalizationManager : MonoBehaviour
     
     void OnDestroy()
     {
-        // 释放资源
+        // Release resources
         _streamer?.Dispose();
     }
 }
 ```
 
-## ⚡ 性能测试
+## ⚡ Performance Benchmarks
 
-使用BenchmarkDotNet对KVStreamer和传统Dictionary进行了全面的性能对比测试（测试数据：1368条记录，132KB）。
+Comprehensive performance comparison between KVStreamer and traditional Dictionary using BenchmarkDotNet (Test data: 1368 records, 132KB).
 
-### 📈 测试结果总结
+### 📈 Test Results Summary
 
-| 测试项目 | KVStreamer | Dictionary | 对比 |
+| Test Item | KVStreamer | Dictionary | Comparison |
 |---------|------------|------------|------|
-| **单次读取** | 468 ns | 23 ns | 字典快20倍 |
-| **批量读取100条** | 55 μs | 2.3 μs | 字典快24倍 |
-| **加载数据** | 0.5 ms | 85 ms | **KVStreamer快170倍** |
-| **GC压力** | **0 Gen0** | 高 | **KVStreamer零GC** |
-| **内存分配** | **0 B** | 高 | **KVStreamer零分配** |
+| **Single Read** | 468 ns | 23 ns | Dictionary is 20x faster |
+| **Batch Read 100 items** | 55 μs | 2.3 μs | Dictionary is 24x faster |
+| **Data Loading** | 0.5 ms | 85 ms | **KVStreamer is 170x faster** |
+| **GC Pressure** | **0 Gen0** | High | **KVStreamer zero GC** |
+| **Memory Allocation** | **0 B** | High | **KVStreamer zero allocation** |
 
-### 🎯 核心优势
+### 🎯 Core Advantages
 
-#### 1️⃣ **加载性能优势**
-- **KVStreamer**: 直接加载byte[]到内存，仅解析Map头
-- **Dictionary**: 需要解析全部CSV内容，创建多个字符串对象
-- **结论**: KVStreamer加载速度快 **170倍**
+#### 1️⃣ **Loading Performance Advantage**
+- **KVStreamer**: Directly loads byte[] to memory, only parses map header
+- **Dictionary**: Needs to parse entire CSV content, creates multiple string objects
+- **Conclusion**: KVStreamer loads **170x faster**
 
-#### 2️⃣ **内存优势**
+#### 2️⃣ **Memory Advantage**
 ```
 KVStreamer:
-  初始加载: 0 B 分配，0 Gen0 GC
-  读取数据: 按需从流读取，零额外分配
+  Initial Load: 0 B allocation, 0 Gen0 GC
+  Read Data: On-demand read from stream, zero extra allocation
 
 Dictionary:
-  初始加载: 大量字符串对象，频繁GC
-  数据常驻: 所有value永久占用内存
+  Initial Load: Lots of string objects, frequent GC
+  Data Resident: All values permanently occupy memory
 ```
 
-####  3️⃣ **GC压力对比**
-- **KVStreamer**: 零GC，所有数据在流中按需读取
-- **Dictionary**: 加载时产生大量GC，影响帧率
+#### 3️⃣ **GC Pressure Comparison**
+- **KVStreamer**: Zero GC, all data read on-demand from stream
+- **Dictionary**: Produces lots of GC during loading, affects framerate
 
-### 📊 详细性能数据
+### 📊 Detailed Performance Data
 
-#### 读取性能
-| 操作 | KVStreamer（无缓存） | KVStreamer（带缓存） | Dictionary |
+#### Read Performance
+| Operation | KVStreamer (No Cache) | KVStreamer (Cached) | Dictionary |
 |------|----------------|----------------|------------|
-| 单次读取 | 468 ns | < 10 ns | 23 ns |
-| 批量读取100条 | 55 μs | ~1 μs | 2.3 μs |
-| 随机访问10次 | 5.5 μs | < 0.1 μs | 0.23 μs |
+| Single Read | 468 ns | < 10 ns | 23 ns |
+| Batch Read 100 items | 55 μs | ~1 μs | 2.3 μs |
+| Random Access 10 times | 5.5 μs | < 0.1 μs | 0.23 μs |
 
-> **注意**: KVStreamer开启缓存后，性能接近甚至超过Dictionary。
+> **Note**: With caching enabled, KVStreamer performance approaches or even exceeds Dictionary.
 
-#### 加载性能
-| 操作 | KVStreamer | Dictionary | 倍数 |
-|------|------------|------------|----|--
----|
-| 加载1368条数据 | 0.5 ms | 85 ms | **170x** |
-| 内存分配 | 0 B | >>100 KB | **0x** |
-| GC次数 | 0 | 多次 | **0x** |
+#### Loading Performance
+| Operation | KVStreamer | Dictionary | Multiplier |
+|------|------------|------------|------|
+| Load 1368 records | 0.5 ms | 85 ms | **170x** |
+| Memory Allocation | 0 B | >>100 KB | **0x** |
+| GC Count | 0 | Multiple | **0x** |
 
-### 🎮 适用场景建议
+### 🎮 Recommended Usage Scenarios
 
-#### ✅ 推荐使用KVStreamer
-- ✅ **Unity移动平台**：低内存占用，零GC
-- ✅ **大量本地化文本**：加载快，按需读取
-- ✅ **热更新场景**：快速重载，不需重启App
-- ✅ **AssetBundle/Resources**：直接使用byte[]
+#### ✅ Recommended to Use KVStreamer
+- ✅ **Unity Mobile Platforms**: Low memory footprint, zero GC
+- ✅ **Large Localization Texts**: Fast loading, on-demand reading
+- ✅ **Hot Update Scenarios**: Quick reload, no need to restart app
+- ✅ **AssetBundle/Resources**: Direct use of byte[]
 
-#### 🔴 推荐使用Dictionary
-- 🔴 数据量小（<100条）
-- 🔴 需要极致随机访问性能（无缓存）
-- 🔴 不关心内存和GC
+#### 🔴 Recommended to Use Dictionary
+- 🔴 Small dataset (<100 records)
+- 🔴 Need extreme random access performance (no cache)
+- 🔴 Don't care about memory and GC
 
-### 🛠️ 运行基准测试
+### 🛠️ Running Benchmarks
 
 ```bash
 cd Src/Benchmark
 dotnet run -c Release
 ```
 
-测试环境：
+Test Environment:
 - .NET 8.0
-- Release编译
+- Release build
 - BenchmarkDotNet 0.15.8
-- 测试数据：chapter1.csv (1368条记录, 132KB)
+- Test data: chapter1.csv (1368 records, 132KB)
 
-### 💡 性能优化建议
+### 💡 Performance Optimization Tips
 
-1. **启用缓存**: 对于频繁访问的数据，开启缓存可获得接近Dictionary的性能
-2. **预加载热点数据**: 启动时预读取常用key，填充缓存
-3. **合理缓存时间**: 根据业务场景设置适当的cacheDuration
-4. **使用byte[]加载**: Unity中使用LoadBinaryData(byte[])代替LoadBinaryFile()
+1. **Enable Caching**: For frequently accessed data, enabling cache provides Dictionary-like performance
+2. **Preload Hot Data**: Preload commonly used keys at startup to fill cache
+3. **Reasonable Cache Time**: Set appropriate cacheDuration based on business scenarios
+4. **Use byte[] Loading**: Use LoadBinaryData(byte[]) instead of LoadBinaryFile() in Unity
 
-## ⚠️ 缓存系统
+## ⚠️ Cache System
 
-### 缓存特性
+### Cache Features
 
-- ✅ 自动过期：到达设定时间后自动失效
-- ✅ 定期清理：每60秒自动清理过期缓存
-- ✅ 内存优化：只缓存访问过的数据
-- ✅ 可配置：支持动态调整缓存时间
+- ✅ Auto Expiration: Automatically expires after set duration
+- ✅ Periodic Cleanup: Automatically cleans expired cache every 60 seconds
+- ✅ Memory Optimization: Only caches accessed data
+- ✅ Configurable: Supports dynamic cache time adjustment
 
-### 缓存使用示例
+### Cache Usage Example
 
 ```csharp
 using (KVStreamer streamer = new KVStreamer(cacheDuration: 60f))
 {
     streamer.LoadBinaryFile("data.bytes");
     
-    // 第一次读取，从文件流读取
-    string text1 = streamer.GetValue("item_001"); // 较慢
+    // First read, from file stream
+    string text1 = streamer.GetValue("item_001"); // Slower
     
-    // 第二次读取，从缓存读取
-    string text2 = streamer.GetValue("item_001"); // 很快
+    // Second read, from cache
+    string text2 = streamer.GetValue("item_001"); // Fast
     
-    // 手动清除缓存
+    // Manually clear cache
     streamer.ClearCache();
 }
 ```
 
-## 🔍 性能优化建议
+## 🔍 Performance Optimization Recommendations
 
-1. **合理设置缓存时间**: 根据实际使用场景调整缓存时间
-   - 频繁访问的数据：设置较长的缓存时间（如300-600秒）
-   - 偶尔访问的数据：设置较短的缓存时间（如60-120秒）
+1. **Set Reasonable Cache Time**: Adjust cache time based on actual usage scenarios
+   - Frequently accessed data: Set longer cache time (e.g., 300-600 seconds)
+   - Occasionally accessed data: Set shorter cache time (e.g., 60-120 seconds)
 
-2. **批量预加载**: 如果已知需要访问的数据，可以在启动时批量预加载到缓存
+2. **Batch Preload**: If you know the data to be accessed, batch preload to cache at startup
 
-3. **及时释放**: 使用完毕后调用`Dispose()`或使用`using`语句自动释放资源
+3. **Release Promptly**: Call `Dispose()` after use or use `using` statement for automatic resource release
 
-4. **避免重复创建**: 建议使用单例模式管理`KVStreamer`实例
+4. **Avoid Repeated Creation**: Recommend using singleton pattern to manage `KVStreamer` instances
 
-## 📝 运行示例
+## 📝 Running Example
 
-进入项目目录，编译并运行示例程序：
+Enter the project directory, compile and run the example program:
 
 ```bash
 cd c:\GIT\KVStreamer
@@ -361,20 +362,20 @@ csc /out:Example.exe /recurse:*.cs
 Example.exe
 ```
 
-或使用Visual Studio打开项目运行。
+Or open the project in Visual Studio and run.
 
-## ⚠️ 注意事项
+## ⚠️ Important Notes
 
-1. CSV文件必须包含`ID`和`Text`列（不区分大小写）
-2. 支持CSV中的引号包裹和逗号转义
-3. 编码统一使用UTF-8
-4. 键值不能为空字符串
-5. 重复的ID只保留第一个
+1. CSV file must contain `ID` and `Text` columns (case-insensitive)
+2. Supports CSV quote wrapping and comma escaping
+3. Encoding is unified to UTF-8
+4. Keys and values cannot be empty strings
+5. Duplicate IDs only keep the first one
 
-## 📄 许可证
+## 📄 License
 
 MIT License
 
-## 🤝 贡献
+## 🤝 Contributing
 
-欢迎提交Issue和Pull Request！
+Issues and Pull Requests are welcome!
