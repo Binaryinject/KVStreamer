@@ -191,6 +191,31 @@ string GetValue(string key)
 **返回:**
 - 对应的值，如果不存在返回`null`
 
+##### TryGetValue
+```csharp
+bool TryGetValue(string key, out string value)
+```
+尝试获取与指定键关联的值。
+
+**参数:**
+- `key`: 键
+- `value`: 当此方法返回时，如果找到则包含与指定键关联的值；否则为 `null`
+
+**返回:**
+- 如果找到指定键则为 `true`，否则为 `false`
+
+**示例:**
+```csharp
+if (streamer.TryGetValue("item_001", out string value))
+{
+    Console.WriteLine($"找到: {value}");
+}
+else
+{
+    Console.WriteLine("未找到键");
+}
+```
+
 ##### GetAllKeys
 ```csharp
 List<string> GetAllKeys()

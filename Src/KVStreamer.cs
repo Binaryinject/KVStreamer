@@ -354,6 +354,18 @@ namespace FSTGame
         }
 
         /// <summary>
+        /// 尝试获取指定键的值
+        /// </summary>
+        /// <param name="key">键</param>
+        /// <param name="value">如果找到则包含关联的值，否则为null</param>
+        /// <returns>如果找到指定键则为true，否则为false</returns>
+        public bool TryGetValue(string key, out string value)
+        {
+            value = GetValue(key);
+            return value != null;
+        }
+
+        /// <summary>
         /// 从指定偏移量读取值
         /// </summary>
         private string ReadValueAtOffset(long offset)

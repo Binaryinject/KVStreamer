@@ -191,6 +191,31 @@ Get value by key (with caching).
 **Returns:**
 - Corresponding value, returns `null` if not found
 
+##### TryGetValue
+```csharp
+bool TryGetValue(string key, out string value)
+```
+Attempts to get the value associated with the specified key.
+
+**Parameters:**
+- `key`: Key
+- `value`: When this method returns, contains the value associated with the specified key if found; otherwise, `null`
+
+**Returns:**
+- `true` if the key was found; otherwise, `false`
+
+**Example:**
+```csharp
+if (streamer.TryGetValue("item_001", out string value))
+{
+    Console.WriteLine($"Found: {value}");
+}
+else
+{
+    Console.WriteLine("Key not found");
+}
+```
+
 ##### GetAllKeys
 ```csharp
 List<string> GetAllKeys()
