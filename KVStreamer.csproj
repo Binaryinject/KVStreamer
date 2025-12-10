@@ -9,7 +9,7 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>KVStreamer</PackageId>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <Authors>Binaryinject</Authors>
     <Company>Binaryinject</Company>
     <Product>KVStreamer</Product>
@@ -22,14 +22,22 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
-    <PackageReleaseNotes>Version 1.1.0:
+    <PackageReleaseNotes>Version 1.2.0:
+- Implement full Dictionary interface compatibility
+- Support IDictionary&lt;string, string&gt; and IReadOnlyDictionary&lt;string, string&gt;
+- Support ICollection and IEnumerable interfaces (generic and non-generic)
+- Add Values property and enumeration support
+- Add DictionaryEnumerator for non-generic IDictionary
+- All modification methods throw NotSupportedException (read-only)
+- Fully compatible with Dictionary&lt;TKey, TValue&gt; interface
+- Performance optimization using TryGetValue
+
+Version 1.1.0:
 - Change namespace to FSTGame
-- Maintain backward compatibility with same assembly name
 - GZip compression (60-70% size reduction)
 - Map header indexing for fast lookup
 - Smart caching system
-- Thread-safe operations
-- Zero GC pressure</PackageReleaseNotes>
+- Thread-safe operations</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
