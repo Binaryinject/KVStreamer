@@ -89,15 +89,11 @@ npc_001,Village chief dialogue text,NPC dialogue
 ```csharp
 using FSTGame;
 
-// Create KVStreamer instance
-using (KVStreamer streamer = new KVStreamer())
-{
-    // Generate compressed binary file (default)
-    streamer.CreateBinaryFromCSV("data.csv", "data.bytes");
-    
-    // Or generate uncompressed file
-    streamer.CreateBinaryFromCSV("data.csv", "data.bytes", compress: false);
-}
+// Static method - no need to create instance
+KVStreamer.CreateBinaryFromCSV("data.csv", "data.bytes");
+
+// Or generate uncompressed file
+KVStreamer.CreateBinaryFromCSV("data.csv", "data.bytes", compress: false);
 ```
 
 ### 3. Load and Read Data
@@ -114,9 +110,21 @@ using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300 seconds
     byte[] data = File.ReadAllBytes("data.bytes");
     streamer.LoadBinaryData(data);
     
-    // Get value by key
-    string text = streamer.GetValue("item_001");
-    Console.WriteLine(text); // Output: This is the first item
+    // Get value by key - multiple ways
+    string text1 = streamer.GetValue("item_001");
+    string text2 = streamer["item_001"]; // Indexer, throws exception if not found
+    
+    // TryGetValue pattern (like Dictionary)
+    if (streamer.TryGetValue("item_001", out string text3))
+    {
+        Console.WriteLine(text3);
+    }
+    
+    // Access all keys
+    foreach (string key in streamer.Keys)
+    {
+        Console.WriteLine($"{key}: {streamer[key]}");
+    }
 }
 ```
 
@@ -133,11 +141,11 @@ KVStreamer(float cacheDuration = 300f)
 
 #### Methods
 
-##### CreateBinaryFromCSV
+##### CreateBinaryFromCSV (Static)
 ```csharp
-void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
+static void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
 ```
-Create binary file from CSV file with optional compression.
+Create binary file from CSV file with optional compression (static method).
 
 **Parameters:**
 - `csvPath`: CSV file path
@@ -152,6 +160,8 @@ Create binary file from CSV file with optional compression.
 - Small files (12 records): ~36% compression rate
 - Large files (1,368 records): ~67% compression rate (3:1 ratio)
 - Automatic decompression on load
+
+**Note:** This is a static method, no need to create instance.
 
 ##### LoadBinaryFile
 ```csharp
@@ -190,6 +200,26 @@ Get value by key (with caching).
 
 **Returns:**
 - Corresponding value, returns `null` if not found
+
+##### Indexer
+```csharp
+string this[string key] { get; }
+```
+Gets the value associated with the specified key (Dictionary-like indexer).
+
+**Parameters:**
+- `key`: The key of the value to get
+
+**Returns:**
+- The value associated with the specified key
+
+**Exceptions:**
+- `KeyNotFoundException`: The key does not exist
+
+**Example:**
+```csharp
+string value = streamer["item_001"];
+```
 
 ##### TryGetValue
 ```csharp
@@ -256,6 +286,20 @@ Close binary file stream.
 int Count { get; }
 ```
 Get total number of key-value pairs.
+
+##### Keys
+```csharp
+ICollection<string> Keys { get; }
+```
+Gets a collection containing the keys (Dictionary-like property).
+
+**Example:**
+```csharp
+foreach (string key in streamer.Keys)
+{
+    Console.WriteLine(key);
+}
+```
 
 ## 🎮 Unity Usage Example
 

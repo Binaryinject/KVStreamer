@@ -31,12 +31,12 @@ namespace FSTGame
         #region CSV转二进制文件
 
         /// <summary>
-        /// 从CSV文件创建二进制文件
+        /// 从CSV文件创建二进制文件（静态方法）
         /// </summary>
         /// <param name="csvPath">CSV文件路径</param>
         /// <param name="outputPath">输出的.bytes文件路径</param>
         /// <param name="compress">是否压缩，默认为true</param>
-        public void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
+        public static void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
         {
             if (!File.Exists(csvPath))
             {
@@ -50,7 +50,7 @@ namespace FSTGame
         /// <summary>
         /// 解析CSV文件
         /// </summary>
-        private Dictionary<string, string> ParseCSV(string csvPath)
+        private static Dictionary<string, string> ParseCSV(string csvPath)
         {
             var result = new Dictionary<string, string>();
             
@@ -109,7 +109,7 @@ namespace FSTGame
         /// <summary>
         /// 解析CSV行（支持引号内的逗号）
         /// </summary>
-        private string[] ParseCSVLine(string line)
+        private static string[] ParseCSVLine(string line)
         {
             List<string> fields = new List<string>();
             bool inQuotes = false;
@@ -143,7 +143,7 @@ namespace FSTGame
         /// 格式: [压缩标志(1字节)][Map头大小(4字节)][Map头数据][Value数据]
         /// Map头: 每个条目 [Key长度(4)][Key字符串][Value偏移量(8)]
         /// </summary>
-        private void GenerateBinaryFile(Dictionary<string, string> kvPairs, string outputPath, bool compress)
+        private static void GenerateBinaryFile(Dictionary<string, string> kvPairs, string outputPath, bool compress)
         {
             using (MemoryStream ms = new MemoryStream())
             {
@@ -387,7 +387,34 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 获取所有的Key
+        /// 获取或设置与指定键关联的值（索引器）
+        /// </summary>
+        /// <param name="key">要获取或设置的值的键</param>
+        /// <returns>与指定键关联的值</returns>
+        public string this[string key]
+        {
+            get
+            {
+                if (TryGetValue(key, out string value))
+                    return value;
+                throw new KeyNotFoundException($"未找到键: {key}");
+            }
+            set
+            {
+                throw new NotSupportedException("不支持设置值，KVStreamer 是只读的");
+            }
+        }
+
+        /// <summary>
+        /// 获取包含键的集合
+        /// </summary>
+        public ICollection<string> Keys
+        {
+            get { return _keyOffsetMap.Keys; }
+        }
+
+        /// <summary>
+        /// 获取所有的Key列表
         /// </summary>
         /// <returns>所有key的列表</returns>
         public List<string> GetAllKeys()

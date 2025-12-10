@@ -89,15 +89,11 @@ npc_001,村长对话文本,NPC对话
 ```csharp
 using FSTGame;
 
-// 创建KVStreamer实例
-using (KVStreamer streamer = new KVStreamer())
-{
-    // 生成压缩的二进制文件（默认）
-    streamer.CreateBinaryFromCSV("data.csv", "data.bytes");
-    
-    // 或者生成未压缩的文件
-    streamer.CreateBinaryFromCSV("data.csv", "data.bytes", compress: false);
-}
+// 静态方法 - 无需创建实例
+KVStreamer.CreateBinaryFromCSV("data.csv", "data.bytes");
+
+// 或者生成未压缩的文件
+KVStreamer.CreateBinaryFromCSV("data.csv", "data.bytes", compress: false);
 ```
 
 ### 3. 加载并读取数据
@@ -114,9 +110,21 @@ using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300秒缓�
     byte[] data = File.ReadAllBytes("data.bytes");
     streamer.LoadBinaryData(data);
     
-    // 通过Key获取Value
-    string text = streamer.GetValue("item_001");
-    Console.WriteLine(text); // 输出: 这是第一个物品
+    // 获取值 - 多种方式
+    string text1 = streamer.GetValue("item_001");
+    string text2 = streamer["item_001"]; // 索引器，不存在时抛出异常
+    
+    // TryGetValue 模式（类似 Dictionary）
+    if (streamer.TryGetValue("item_001", out string text3))
+    {
+        Console.WriteLine(text3);
+    }
+    
+    // 访问所有键
+    foreach (string key in streamer.Keys)
+    {
+        Console.WriteLine($"{key}: {streamer[key]}");
+    }
 }
 ```
 
@@ -133,11 +141,11 @@ KVStreamer(float cacheDuration = 300f)
 
 #### 方法
 
-##### CreateBinaryFromCSV
+##### CreateBinaryFromCSV（静态方法）
 ```csharp
-void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
+static void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
 ```
-从CSV文件创建二进制文件，支持可选压缩。
+从CSV文件创建二进制文件，支持可选压缩（静态方法）。
 
 **参数:**
 - `csvPath`: CSV文件路径
@@ -152,6 +160,8 @@ void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true
 - 小文件（12条记录）：~36% 压缩率
 - 大文件（1,368条记录）：~67% 压缩率（3:1 压缩比）
 - 加载时自动解压缩
+
+**注意:** 这是静态方法，无需创建实例。
 
 ##### LoadBinaryFile
 ```csharp
@@ -190,6 +200,26 @@ string GetValue(string key)
 
 **返回:**
 - 对应的值，如果不存在返回`null`
+
+##### 索引器
+```csharp
+string this[string key] { get; }
+```
+获取与指定键关联的值（类似 Dictionary 的索引器）。
+
+**参数:**
+- `key`: 要获取值的键
+
+**返回:**
+- 与指定键关联的值
+
+**异常:**
+- `KeyNotFoundException`: 键不存在
+
+**示例:**
+```csharp
+string value = streamer["item_001"];
+```
 
 ##### TryGetValue
 ```csharp
@@ -256,6 +286,20 @@ void CloseBinaryFile()
 int Count { get; }
 ```
 获取键值对总数。
+
+##### Keys
+```csharp
+ICollection<string> Keys { get; }
+```
+获取包含键的集合（类似 Dictionary 的属性）。
+
+**示例:**
+```csharp
+foreach (string key in streamer.Keys)
+{
+    Console.WriteLine(key);
+}
+```
 
 ## 🎮 Unity使用示例
 
