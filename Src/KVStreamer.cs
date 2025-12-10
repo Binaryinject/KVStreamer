@@ -338,11 +338,10 @@ namespace FSTGame
             if (cachedValue != null)
                 return cachedValue;
 
-            // 从文件流读取
-            if (!_keyOffsetMap.ContainsKey(key))
+            // 从文件流读取，使用TryGetValue避免两次查找
+            if (!_keyOffsetMap.TryGetValue(key, out long offset))
                 return null;
 
-            long offset = _keyOffsetMap[key];
             string value = ReadValueAtOffset(offset);
 
             // 加入缓存
