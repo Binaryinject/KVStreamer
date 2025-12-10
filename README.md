@@ -40,6 +40,7 @@ Or visit: [https://www.nuget.org/packages/KVStreamer/](https://www.nuget.org/pac
 - 🔒 **Thread Safe**: File read operations protected with locks
 - ⚡ **Excellent Performance**: Low GC pressure, suitable for mobile platforms and large datasets
 - 🔄 **Backward Compatible**: Automatically detects and loads both compressed and uncompressed formats
+- 📖 **Dictionary Interface**: Implements IDictionary, IReadOnlyDictionary and related interfaces for full compatibility
 
 ## 📦 Project Structure
 
@@ -120,6 +121,18 @@ using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300 seconds
         Console.WriteLine(text3);
     }
     
+    // Use as Dictionary (implements IDictionary<string, string>)
+    IDictionary<string, string> dict = streamer;
+    
+    // Use as IReadOnlyDictionary
+    IReadOnlyDictionary<string, string> readOnlyDict = streamer;
+    
+    // Enumerate all key-value pairs
+    foreach (KeyValuePair<string, string> kvp in streamer)
+    {
+        Console.WriteLine($"{kvp.Key}: {kvp.Value}");
+    }
+    
     // Access all keys
     foreach (string key in streamer.Keys)
     {
@@ -131,6 +144,19 @@ using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300 seconds
 ## 📚 API Documentation
 
 ### KVStreamer Main Class
+
+**Implements:**
+- `IDictionary<string, string>`
+- `IReadOnlyDictionary<string, string>`
+- `ICollection<KeyValuePair<string, string>>`
+- `IReadOnlyCollection<KeyValuePair<string, string>>`
+- `IEnumerable<KeyValuePair<string, string>>`
+- `IDictionary` (non-generic)
+- `ICollection` (non-generic)
+- `IEnumerable` (non-generic)
+- `IDisposable`
+
+**Note:** KVStreamer is read-only. All modification operations (Add, Remove, Clear) will throw `NotSupportedException`.
 
 #### Constructor
 

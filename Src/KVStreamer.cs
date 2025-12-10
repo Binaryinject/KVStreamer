@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
@@ -9,7 +10,15 @@ namespace FSTGame
     /// <summary>
     /// KV流式读取器主类
     /// </summary>
-    public class KVStreamer : IDisposable
+    public class KVStreamer : 
+        IDisposable,
+        IDictionary<string, string>,
+        IReadOnlyDictionary<string, string>,
+        IDictionary,
+        ICollection<KeyValuePair<string, string>>,
+        IReadOnlyCollection<KeyValuePair<string, string>>,
+        IEnumerable<KeyValuePair<string, string>>,
+        IEnumerable
     {
         private MemoryStream _dataStream;
         private Dictionary<string, long> _keyOffsetMap;
@@ -466,6 +475,298 @@ namespace FSTGame
         public void CloseBinaryFile()
         {
             CloseDataStream();
+        }
+
+        #endregion
+
+        #region IDictionary<string, string> 实现
+
+        /// <summary>
+        /// 获取包含值的集合（需要加载所有值）
+        /// </summary>
+        ICollection<string> IDictionary<string, string>.Values
+        {
+            get
+            {
+                var values = new List<string>();
+                foreach (var key in _keyOffsetMap.Keys)
+                {
+                    values.Add(GetValue(key));
+                }
+                return values;
+            }
+        }
+
+        /// <summary>
+        /// 是否为只读
+        /// </summary>
+        public bool IsReadOnly => true;
+
+        /// <summary>
+        /// 添加键值对（不支持）
+        /// </summary>
+        public void Add(string key, string value)
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持添加操作");
+        }
+
+        /// <summary>
+        /// 添加键值对（不支持）
+        /// </summary>
+        public void Add(KeyValuePair<string, string> item)
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持添加操作");
+        }
+
+        /// <summary>
+        /// 清空集合（不支持）
+        /// </summary>
+        void ICollection<KeyValuePair<string, string>>.Clear()
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持清空操作");
+        }
+
+        /// <summary>
+        /// 判断是否包含指定的键值对
+        /// </summary>
+        public bool Contains(KeyValuePair<string, string> item)
+        {
+            if (TryGetValue(item.Key, out string value))
+            {
+                return value == item.Value;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// 复制到数组
+        /// </summary>
+        public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex)
+        {
+            if (array == null)
+                throw new ArgumentNullException(nameof(array));
+            if (arrayIndex < 0)
+                throw new ArgumentOutOfRangeException(nameof(arrayIndex));
+            if (array.Length - arrayIndex < Count)
+                throw new ArgumentException("数组长度不足");
+
+            int index = arrayIndex;
+            foreach (var key in _keyOffsetMap.Keys)
+            {
+                array[index++] = new KeyValuePair<string, string>(key, GetValue(key));
+            }
+        }
+
+        /// <summary>
+        /// 移除键（不支持）
+        /// </summary>
+        public bool Remove(string key)
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持移除操作");
+        }
+
+        /// <summary>
+        /// 移除键值对（不支持）
+        /// </summary>
+        public bool Remove(KeyValuePair<string, string> item)
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持移除操作");
+        }
+
+        #endregion
+
+        #region IReadOnlyDictionary<string, string> 实现
+
+        /// <summary>
+        /// 获取包含值的集合（只读）
+        /// </summary>
+        IEnumerable<string> IReadOnlyDictionary<string, string>.Values
+        {
+            get
+            {
+                foreach (var key in _keyOffsetMap.Keys)
+                {
+                    yield return GetValue(key);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 获取包含键的集合（只读）
+        /// </summary>
+        IEnumerable<string> IReadOnlyDictionary<string, string>.Keys
+        {
+            get { return _keyOffsetMap.Keys; }
+        }
+
+        #endregion
+
+        #region IDictionary 非泛型实现
+
+        /// <summary>
+        /// 添加元素（不支持）
+        /// </summary>
+        void IDictionary.Add(object key, object value)
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持添加操作");
+        }
+
+        /// <summary>
+        /// 清空（不支持）
+        /// </summary>
+        void IDictionary.Clear()
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持清空操作");
+        }
+
+        /// <summary>
+        /// 判断是否包含指定键
+        /// </summary>
+        bool IDictionary.Contains(object key)
+        {
+            if (key is string stringKey)
+                return ContainsKey(stringKey);
+            return false;
+        }
+
+        /// <summary>
+        /// 获取枚举器
+        /// </summary>
+        IDictionaryEnumerator IDictionary.GetEnumerator()
+        {
+            return new DictionaryEnumerator(this);
+        }
+
+        /// <summary>
+        /// 是否为固定大小
+        /// </summary>
+        bool IDictionary.IsFixedSize => true;
+
+        /// <summary>
+        /// 获取键集合
+        /// </summary>
+        ICollection IDictionary.Keys => (ICollection)_keyOffsetMap.Keys;
+
+        /// <summary>
+        /// 获取值集合
+        /// </summary>
+        ICollection IDictionary.Values
+        {
+            get
+            {
+                var values = new List<string>();
+                foreach (var key in _keyOffsetMap.Keys)
+                {
+                    values.Add(GetValue(key));
+                }
+                return values;
+            }
+        }
+
+        /// <summary>
+        /// 移除（不支持）
+        /// </summary>
+        void IDictionary.Remove(object key)
+        {
+            throw new NotSupportedException("KVStreamer 是只读的，不支持移除操作");
+        }
+
+        /// <summary>
+        /// 非泛型索引器
+        /// </summary>
+        object IDictionary.this[object key]
+        {
+            get
+            {
+                if (key is string stringKey)
+                    return this[stringKey];
+                throw new ArgumentException("键必须是字符串类型");
+            }
+            set
+            {
+                throw new NotSupportedException("KVStreamer 是只读的，不支持设置值");
+            }
+        }
+
+        #endregion
+
+        #region ICollection 非泛型实现
+
+        /// <summary>
+        /// 复制到数组
+        /// </summary>
+        void ICollection.CopyTo(Array array, int index)
+        {
+            if (array == null)
+                throw new ArgumentNullException(nameof(array));
+            if (index < 0)
+                throw new ArgumentOutOfRangeException(nameof(index));
+            if (array.Length - index < Count)
+                throw new ArgumentException("数组长度不足");
+
+            int i = index;
+            foreach (var key in _keyOffsetMap.Keys)
+            {
+                array.SetValue(new KeyValuePair<string, string>(key, GetValue(key)), i++);
+            }
+        }
+
+        /// <summary>
+        /// 是否同步
+        /// </summary>
+        bool ICollection.IsSynchronized => false;
+
+        /// <summary>
+        /// 同步对象
+        /// </summary>
+        object ICollection.SyncRoot => this;
+
+        #endregion
+
+        #region IEnumerable 实现
+
+        /// <summary>
+        /// 获取泛型枚举器
+        /// </summary>
+        public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
+        {
+            foreach (var key in _keyOffsetMap.Keys)
+            {
+                yield return new KeyValuePair<string, string>(key, GetValue(key));
+            }
+        }
+
+        /// <summary>
+        /// 获取非泛型枚举器
+        /// </summary>
+        IEnumerator IEnumerable.GetEnumerator()
+        {
+            return GetEnumerator();
+        }
+
+        #endregion
+
+        #region 辅助类
+
+        /// <summary>
+        /// 字典枚举器实现
+        /// </summary>
+        private class DictionaryEnumerator : IDictionaryEnumerator
+        {
+            private readonly IEnumerator<KeyValuePair<string, string>> _enumerator;
+
+            public DictionaryEnumerator(KVStreamer streamer)
+            {
+                _enumerator = streamer.GetEnumerator();
+            }
+
+            public object Key => _enumerator.Current.Key;
+            public object Value => _enumerator.Current.Value;
+            public DictionaryEntry Entry => new DictionaryEntry(_enumerator.Current.Key, _enumerator.Current.Value);
+            public object Current => Entry;
+
+            public bool MoveNext() => _enumerator.MoveNext();
+            public void Reset() => _enumerator.Reset();
         }
 
         #endregion

@@ -40,6 +40,7 @@ Install-Package KVStreamer
 - 🔒 **线程安全**: 文件读取操作使用lock保护
 - ⚡ **性能出色**: GC压力低，适合移动平台和大数据量场景
 - 🔄 **向后兼容**: 自动检测并加载压缩和未压缩格式
+- 📖 **Dictionary 接口**: 实现 IDictionary、IReadOnlyDictionary 等接口，完全兼容
 
 ## 📦 项目结构
 
@@ -120,6 +121,18 @@ using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300秒缓�
         Console.WriteLine(text3);
     }
     
+    // 作为 Dictionary 使用（实现 IDictionary<string, string>）
+    IDictionary<string, string> dict = streamer;
+    
+    // 作为 IReadOnlyDictionary 使用
+    IReadOnlyDictionary<string, string> readOnlyDict = streamer;
+    
+    // 枚举所有键值对
+    foreach (KeyValuePair<string, string> kvp in streamer)
+    {
+        Console.WriteLine($"{kvp.Key}: {kvp.Value}");
+    }
+    
     // 访问所有键
     foreach (string key in streamer.Keys)
     {
@@ -131,6 +144,19 @@ using (KVStreamer streamer = new KVStreamer(cacheDuration: 300f)) // 300秒缓�
 ## 📚 API文档
 
 ### KVStreamer 主类
+
+**实现的接口:**
+- `IDictionary<string, string>`
+- `IReadOnlyDictionary<string, string>`
+- `ICollection<KeyValuePair<string, string>>`
+- `IReadOnlyCollection<KeyValuePair<string, string>>`
+- `IEnumerable<KeyValuePair<string, string>>`
+- `IDictionary`（非泛型）
+- `ICollection`（非泛型）
+- `IEnumerable`（非泛型）
+- `IDisposable`
+
+**注意:** KVStreamer 是只读的。所有修改操作（Add、Remove、Clear）将抛出 `NotSupportedException`。
 
 #### 构造函数
 
