@@ -2,7 +2,32 @@
 
 [中文](./README_CN.md) | English
 
+[![NuGet](https://img.shields.io/nuget/v/KVStreamer.svg)](https://www.nuget.org/packages/KVStreamer/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/KVStreamer.svg)](https://www.nuget.org/packages/KVStreamer/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A high-performance C# library for Unity that provides streaming key-value pair reading, supports generating compact binary format from CSV files, and features an intelligent cache system with time control.
+
+## 📦 Installation
+
+### NuGet Package
+
+```bash
+dotnet add package KVStreamer
+```
+
+Or via Package Manager:
+```bash
+Install-Package KVStreamer
+```
+
+Or visit: [https://www.nuget.org/packages/KVStreamer/](https://www.nuget.org/packages/KVStreamer/)
+
+### Unity Installation
+
+1. Download the latest release from [NuGet](https://www.nuget.org/packages/KVStreamer/)
+2. Extract the .nupkg file (rename to .zip)
+3. Copy `KVStreamer.dll` from `lib/netstandard2.0/` to your Unity project's `Plugins` folder
 
 ## ✨ Features
 

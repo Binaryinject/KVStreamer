@@ -2,7 +2,32 @@
 
 中文 | [English](./README.md)
 
+[![NuGet](https://img.shields.io/nuget/v/KVStreamer.svg)](https://www.nuget.org/packages/KVStreamer/)
+[![NuGet 下载](https://img.shields.io/nuget/dt/KVStreamer.svg)](https://www.nuget.org/packages/KVStreamer/)
+[![许可证: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 一个用于Unity的高性能键值对流式读取C#库,支持从CSV文件生成紧凑的二进制格式,并提供带时间控制的智能缓存系统。
+
+## 📦 安装
+
+### NuGet 包
+
+```bash
+dotnet add package KVStreamer
+```
+
+或者使用 Package Manager：
+```bash
+Install-Package KVStreamer
+```
+
+或者访问：[https://www.nuget.org/packages/KVStreamer/](https://www.nuget.org/packages/KVStreamer/)
+
+### Unity 安装
+
+1. 从 [NuGet](https://www.nuget.org/packages/KVStreamer/) 下载最新版本
+2. 解压 .nupkg 文件（重命名为 .zip）
+3. 将 `KVStreamer.dll` 从 `lib/netstandard2.0/` 复制到 Unity 项目的 `Plugins` 文件夹
 
 ## ✨ 特性
 
