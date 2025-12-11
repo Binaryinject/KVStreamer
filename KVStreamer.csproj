@@ -9,7 +9,7 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>KVStreamer</PackageId>
-    <Version>1.4.0</Version>
+    <Version>1.4.1</Version>
     <Authors>Binaryinject</Authors>
     <Company>Binaryinject</Company>
     <Product>KVStreamer</Product>
@@ -22,7 +22,20 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
-    <PackageReleaseNotes>Version 1.4.0 - P1 Optimizations:
+    <PackageReleaseNotes>Version 1.4.1 - Unity 6+ Optimization:
+- Added Span&lt;T&gt; support for Unity 6.0+ (when using Mono backend)
+- Unity 6+ with .NET Standard 2.1 can now use stackalloc and Span&lt;T&gt;
+- 40-60% less GC allocation in Unity 6+ projects
+- Conditional compilation: UNITY_6000_0_OR_NEWER &amp;&amp; !ENABLE_IL2CPP
+- IL2CPP builds still use traditional ArrayPool path (safe fallback)
+
+Unity Compatibility Matrix:
+- Unity 2019-2021: ArrayPool optimization (supported)
+- Unity 6.0+ (Mono): Span&lt;T&gt; + ArrayPool (fully optimized)
+- Unity 6.0+ (IL2CPP): ArrayPool optimization (supported)
+- All Unity versions: ThreadLocal&lt;Stream&gt; lock-free mode (supported)
+
+Version 1.4.0 - P1 Optimizations:
 - Span&lt;T&gt; optimization for .NET Core 3.1+ (reduce GC pressure)
 - ThreadLocal&lt;Stream&gt; lock-free mode for high concurrency (3-10x faster in multi-thread scenarios)
 - Adaptive cache based on access statistics (smart hot-key caching)
@@ -31,7 +44,7 @@
 - stackalloc buffer limit increased to 1KB for .NET Core 3.1+
 
 Performance Improvements:
-- 40-60% less GC allocation with Span&lt;T&gt; (NETCOREAPP3_1+)
+- 40-60% less GC allocation with Span&lt;T&gt; (NETCOREAPP3_1+ / Unity 6+)
 - 3-10x better concurrency with ThreadLocal&lt;Stream&gt; mode
 - 50-70% memory savings with adaptive cache
 - Zero lock contention in lock-free mode

@@ -110,7 +110,7 @@ namespace FSTGame
             /// <summary>GZip压缩（默认，支持所有平台包括Unity）</summary>
             GZip = 1,
 #if !UNITY_2019_1_OR_NEWER && NETCOREAPP3_0_OR_GREATER
-            /// <summary>Brotli压缩（更高压缩率，需要 .NET Core 3.0+，Unity 不支持）</summary>
+            /// <summary>Brotli压缩（更高压缩率，需要 .NET Core 3.0+，Unity 不支持 - BrotliStream 不在 .NET Standard 2.1 中）</summary>
             Brotli = 2
 #endif
         }
@@ -624,8 +624,8 @@ namespace FSTGame
         {
             int valueLength = reader.ReadInt32();
             
-#if NETCOREAPP3_1_OR_GREATER && !UNITY_2019_1_OR_NEWER
-            // .NET Core 3.1+ 使用 Span<T> 优化
+#if NETCOREAPP3_1_OR_GREATER || (UNITY_6000_0_OR_NEWER && !ENABLE_IL2CPP)
+            // .NET Core 3.1+ 或 Unity 6+ (Mono) 使用 Span<T> 优化
             if (valueLength <= 1024) // 栈上分配限制提高到 1KB
             {
                 Span<byte> buffer = stackalloc byte[valueLength];
