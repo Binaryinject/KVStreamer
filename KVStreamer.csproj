@@ -9,11 +9,11 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>KVStreamer</PackageId>
-    <Version>1.3.0</Version>
+    <Version>1.3.1</Version>
     <Authors>Binaryinject</Authors>
     <Company>Binaryinject</Company>
     <Product>KVStreamer</Product>
-    <Description>A high-performance C# library for Unity that provides streaming key-value pair reading with GZip compression support. Supports generating compact binary format from CSV files and features an intelligent cache system with time control.</Description>
+    <Description>A high-performance C# library for Unity that provides streaming key-value pair reading with GZip compression support. Supports generating compact binary format from CSV files and features an intelligent cache system with time control. Fully compatible with Unity 2019.1+.</Description>
     <PackageTags>Unity;CSV;Binary;KeyValue;Streaming;Cache;Performance;GZip;Compression</PackageTags>
     <PackageProjectUrl>https://github.com/Binaryinject/KVStreamer</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Binaryinject/KVStreamer</RepositoryUrl>
@@ -22,7 +22,13 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
-    <PackageReleaseNotes>Version 1.3.0:
+    <PackageReleaseNotes>Version 1.3.1:
+- Fixed Unity compatibility: Brotli disabled in Unity builds
+- Added conditional compilation for Unity (UNITY_2019_1_OR_NEWER)
+- Ensures GZip works perfectly in all Unity versions
+- Updated documentation for Unity users
+
+Version 1.3.0:
 - Major performance optimization using ArrayPool (30-50% less GC pressure)
 - Upgraded cache system with Ticks and ConcurrentDictionary (2-3x faster)
 - Replaced lock with ReaderWriterLockSlim (3-5x better concurrency)
