@@ -1,28 +1,29 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 namespace FSTGame
 {
     /// <summary>
-    /// 带时间控制的值缓存系统
+    /// 带时间控制的值缓存系统（优化版）
     /// </summary>
     public class ValueCache : IDisposable
     {
         private class CacheEntry
         {
             public string Value { get; set; }
-            public DateTime ExpireTime { get; set; }
+            public long ExpireTicks { get; set; }
 
-            public bool IsExpired()
+            public bool IsExpired(long currentTicks)
             {
-                return DateTime.Now >= ExpireTime;
+                return currentTicks >= ExpireTicks;
             }
         }
 
-        private Dictionary<string, CacheEntry> _cache;
-        private float _cacheDuration; // 缓存持续时间（秒）
-        private DateTime _lastCleanupTime;
-        private const float CLEANUP_INTERVAL = 60f; // 清理间隔（秒）
+        private ConcurrentDictionary<string, CacheEntry> _cache;
+        private long _cacheDurationTicks; // 缓存持续时间（Ticks）
+        private long _lastCleanupTicks;
+        private const long CLEANUP_INTERVAL_TICKS = 60L * TimeSpan.TicksPerSecond; // 清理间隔（Ticks）
         private bool _disposed = false;
 
         /// <summary>
@@ -31,9 +32,9 @@ namespace FSTGame
         /// <param name="cacheDuration">缓存持续时间（秒）</param>
         public ValueCache(float cacheDuration)
         {
-            _cache = new Dictionary<string, CacheEntry>();
-            _cacheDuration = cacheDuration;
-            _lastCleanupTime = DateTime.Now;
+            _cache = new ConcurrentDictionary<string, CacheEntry>();
+            _cacheDurationTicks = (long)(cacheDuration * TimeSpan.TicksPerSecond);
+            _lastCleanupTicks = DateTime.UtcNow.Ticks;
         }
 
         /// <summary>
@@ -44,13 +45,15 @@ namespace FSTGame
             if (string.IsNullOrEmpty(key))
                 return;
 
+            long currentTicks = DateTime.UtcNow.Ticks;
+            
             // 定期清理过期缓存
-            CleanupExpiredEntries();
+            CleanupExpiredEntries(currentTicks);
 
             var entry = new CacheEntry
             {
                 Value = value,
-                ExpireTime = DateTime.Now.AddSeconds(_cacheDuration)
+                ExpireTicks = currentTicks + _cacheDurationTicks
             };
 
             _cache[key] = entry;
@@ -62,14 +65,14 @@ namespace FSTGame
         /// <returns>如果存在且未过期返回值，否则返回null</returns>
         public string Get(string key)
         {
-            if (string.IsNullOrEmpty(key) || !_cache.ContainsKey(key))
+            if (string.IsNullOrEmpty(key) || !_cache.TryGetValue(key, out var entry))
                 return null;
 
-            var entry = _cache[key];
-
-            if (entry.IsExpired())
+            long currentTicks = DateTime.UtcNow.Ticks;
+            
+            if (entry.IsExpired(currentTicks))
             {
-                _cache.Remove(key);
+                _cache.TryRemove(key, out _);
                 return null;
             }
 
@@ -79,17 +82,17 @@ namespace FSTGame
         /// <summary>
         /// 清理过期的缓存条目
         /// </summary>
-        private void CleanupExpiredEntries()
+        private void CleanupExpiredEntries(long currentTicks)
         {
             // 不需要每次都清理，按间隔清理
-            if ((DateTime.Now - _lastCleanupTime).TotalSeconds < CLEANUP_INTERVAL)
+            if ((currentTicks - _lastCleanupTicks) < CLEANUP_INTERVAL_TICKS)
                 return;
 
-            List<string> expiredKeys = new List<string>();
+            var expiredKeys = new List<string>();
 
             foreach (var kvp in _cache)
             {
-                if (kvp.Value.IsExpired())
+                if (kvp.Value.IsExpired(currentTicks))
                 {
                     expiredKeys.Add(kvp.Key);
                 }
@@ -97,10 +100,10 @@ namespace FSTGame
 
             foreach (var key in expiredKeys)
             {
-                _cache.Remove(key);
+                _cache.TryRemove(key, out _);
             }
 
-            _lastCleanupTime = DateTime.Now;
+            _lastCleanupTicks = currentTicks;
         }
 
         /// <summary>
@@ -116,10 +119,7 @@ namespace FSTGame
         /// </summary>
         public void Remove(string key)
         {
-            if (_cache.ContainsKey(key))
-            {
-                _cache.Remove(key);
-            }
+            _cache.TryRemove(key, out _);
         }
 
         /// <summary>
@@ -135,7 +135,7 @@ namespace FSTGame
         /// </summary>
         public void SetCacheDuration(float seconds)
         {
-            _cacheDuration = seconds;
+            _cacheDurationTicks = (long)(seconds * TimeSpan.TicksPerSecond);
         }
 
         public void Dispose()

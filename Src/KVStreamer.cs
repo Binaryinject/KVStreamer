@@ -1,9 +1,11 @@
 using System;
+using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using System.Threading;
 
 namespace FSTGame
 {
@@ -23,9 +25,11 @@ namespace FSTGame
         private MemoryStream _dataStream;
         private Dictionary<string, long> _keyOffsetMap;
         private ValueCache _cache;
+        private ReaderWriterLockSlim _rwLock;
         private bool _disposed = false;
-        private const byte MAGIC_COMPRESSED = 0xC0; // 压缩标志
+        private const byte MAGIC_COMPRESSED = 0xC0; // GZip压缩标志
         private const byte MAGIC_UNCOMPRESSED = 0x00; // 未压缩标志
+        private const byte MAGIC_BROTLI = 0xC1; // Brotli压缩标志 (.NET Core 3.0+)
 
         /// <summary>
         /// 构造函数
@@ -35,6 +39,22 @@ namespace FSTGame
         {
             _keyOffsetMap = new Dictionary<string, long>();
             _cache = new ValueCache(cacheDuration);
+            _rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+        }
+
+        /// <summary>
+        /// 压缩算法枚举
+        /// </summary>
+        public enum CompressionAlgorithm
+        {
+            /// <summary>不压缩</summary>
+            None = 0,
+            /// <summary>GZip压缩（默认，支持所有平台）</summary>
+            GZip = 1,
+#if NETCOREAPP3_0_OR_GREATER
+            /// <summary>Brotli压缩（更高压缩率，需要 .NET Core 3.0+）</summary>
+            Brotli = 2
+#endif
         }
 
         #region CSV转二进制文件
@@ -47,13 +67,24 @@ namespace FSTGame
         /// <param name="compress">是否压缩，默认为true</param>
         public static void CreateBinaryFromCSV(string csvPath, string outputPath, bool compress = true)
         {
+            CreateBinaryFromCSV(csvPath, outputPath, compress ? CompressionAlgorithm.GZip : CompressionAlgorithm.None);
+        }
+
+        /// <summary>
+        /// 从CSV文件创建二进制文件（支持多种压缩算法）
+        /// </summary>
+        /// <param name="csvPath">CSV文件路径</param>
+        /// <param name="outputPath">输出的.bytes文件路径</param>
+        /// <param name="compression">压缩算法</param>
+        public static void CreateBinaryFromCSV(string csvPath, string outputPath, CompressionAlgorithm compression)
+        {
             if (!File.Exists(csvPath))
             {
                 throw new FileNotFoundException($"CSV文件不存在: {csvPath}");
             }
 
             var kvPairs = ParseCSV(csvPath);
-            GenerateBinaryFile(kvPairs, outputPath, compress);
+            GenerateBinaryFile(kvPairs, outputPath, compression);
         }
 
         /// <summary>
@@ -152,7 +183,7 @@ namespace FSTGame
         /// 格式: [压缩标志(1字节)][Map头大小(4字节)][Map头数据][Value数据]
         /// Map头: 每个条目 [Key长度(4)][Key字符串][Value偏移量(8)]
         /// </summary>
-        private static void GenerateBinaryFile(Dictionary<string, string> kvPairs, string outputPath, bool compress)
+        private static void GenerateBinaryFile(Dictionary<string, string> kvPairs, string outputPath, CompressionAlgorithm compression)
         {
             using (MemoryStream ms = new MemoryStream())
             {
@@ -208,23 +239,31 @@ namespace FSTGame
                 // 写入文件
                 using (FileStream fs = new FileStream(outputPath, FileMode.Create, FileAccess.Write))
                 {
-                    if (compress)
+                    switch (compression)
                     {
-                        // 写入压缩标志
-                        fs.WriteByte(MAGIC_COMPRESSED);
-                        
-                        // 使用GZip压缩
-                        using (GZipStream gzipStream = new GZipStream(fs, CompressionMode.Compress, true))
-                        {
-                            gzipStream.Write(uncompressedData, 0, uncompressedData.Length);
-                        }
-                    }
-                    else
-                    {
-                        // 写入未压缩标志
-                        fs.WriteByte(MAGIC_UNCOMPRESSED);
-                        // 直接写入原始数据
-                        fs.Write(uncompressedData, 0, uncompressedData.Length);
+                        case CompressionAlgorithm.GZip:
+                            fs.WriteByte(MAGIC_COMPRESSED);
+                            using (GZipStream gzipStream = new GZipStream(fs, CompressionMode.Compress, true))
+                            {
+                                gzipStream.Write(uncompressedData, 0, uncompressedData.Length);
+                            }
+                            break;
+
+#if NETCOREAPP3_0_OR_GREATER
+                        case CompressionAlgorithm.Brotli:
+                            fs.WriteByte(MAGIC_BROTLI);
+                            using (BrotliStream brotliStream = new BrotliStream(fs, CompressionMode.Compress, true))
+                            {
+                                brotliStream.Write(uncompressedData, 0, uncompressedData.Length);
+                            }
+                            break;
+#endif
+
+                        case CompressionAlgorithm.None:
+                        default:
+                            fs.WriteByte(MAGIC_UNCOMPRESSED);
+                            fs.Write(uncompressedData, 0, uncompressedData.Length);
+                            break;
                     }
                 }
             }
@@ -269,9 +308,16 @@ namespace FSTGame
 
             if (magicByte == MAGIC_COMPRESSED)
             {
-                // 解压缩数据
-                actualData = DecompressData(binaryData, 1);
+                // GZip解压缩
+                actualData = DecompressGZip(binaryData, 1);
             }
+#if NETCOREAPP3_0_OR_GREATER
+            else if (magicByte == MAGIC_BROTLI)
+            {
+                // Brotli解压缩
+                actualData = DecompressBrotli(binaryData, 1);
+            }
+#endif
             else if (magicByte == MAGIC_UNCOMPRESSED)
             {
                 // 未压缩数据，跳过标志字节
@@ -292,9 +338,9 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 解压缩数据
+        /// 解压缩GZip数据
         /// </summary>
-        private byte[] DecompressData(byte[] compressedData, int offset)
+        private byte[] DecompressGZip(byte[] compressedData, int offset)
         {
             using (MemoryStream inputStream = new MemoryStream(compressedData, offset, compressedData.Length - offset))
             using (GZipStream gzipStream = new GZipStream(inputStream, CompressionMode.Decompress))
@@ -305,8 +351,33 @@ namespace FSTGame
             }
         }
 
+#if NETCOREAPP3_0_OR_GREATER
         /// <summary>
-        /// 解析Map头
+        /// 解压缩Brotli数据
+        /// </summary>
+        private byte[] DecompressBrotli(byte[] compressedData, int offset)
+        {
+            using (MemoryStream inputStream = new MemoryStream(compressedData, offset, compressedData.Length - offset))
+            using (BrotliStream brotliStream = new BrotliStream(inputStream, CompressionMode.Decompress))
+            using (MemoryStream outputStream = new MemoryStream())
+            {
+                brotliStream.CopyTo(outputStream);
+                return outputStream.ToArray();
+            }
+        }
+#endif
+
+        /// <summary>
+        /// 解压缩数据（兼容旧方法）
+        /// </summary>
+        [Obsolete("请使用 DecompressGZip 或 DecompressBrotli")]
+        private byte[] DecompressData(byte[] compressedData, int offset)
+        {
+            return DecompressGZip(compressedData, offset);
+        }
+
+        /// <summary>
+        /// 解析Map头（优化版：使用 String.Intern 减少内存）
         /// </summary>
         private void ParseMapHeader()
         {
@@ -324,7 +395,8 @@ namespace FSTGame
                 {
                     int keyLength = reader.ReadInt32();
                     byte[] keyBytes = reader.ReadBytes(keyLength);
-                    string key = Encoding.UTF8.GetString(keyBytes);
+                    // 使用 String.Intern 减少重复字符串内存占用
+                    string key = string.Intern(Encoding.UTF8.GetString(keyBytes));
                     long offset = reader.ReadInt64();
 
                     _keyOffsetMap[key] = offset;
@@ -375,23 +447,46 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 从指定偏移量读取值
+        /// 从指定偏移量读取值（使用 ArrayPool 优化内存）
         /// </summary>
         private string ReadValueAtOffset(long offset)
         {
             if (_dataStream == null)
                 return null;
 
-            lock (_dataStream)
+            _rwLock.EnterReadLock();
+            try
             {
                 _dataStream.Seek(offset, SeekOrigin.Begin);
 
                 using (BinaryReader reader = new BinaryReader(_dataStream, Encoding.UTF8, true))
                 {
                     int valueLength = reader.ReadInt32();
-                    byte[] valueBytes = reader.ReadBytes(valueLength);
-                    return Encoding.UTF8.GetString(valueBytes);
+                    
+                    // 小字符串直接读取，大字符串使用 ArrayPool
+                    if (valueLength <= 256)
+                    {
+                        byte[] buffer = reader.ReadBytes(valueLength);
+                        return Encoding.UTF8.GetString(buffer);
+                    }
+                    else
+                    {
+                        byte[] buffer = ArrayPool<byte>.Shared.Rent(valueLength);
+                        try
+                        {
+                            int bytesRead = reader.Read(buffer, 0, valueLength);
+                            return Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                        }
+                        finally
+                        {
+                            ArrayPool<byte>.Shared.Return(buffer);
+                        }
+                    }
                 }
+            }
+            finally
+            {
+                _rwLock.ExitReadLock();
             }
         }
 
@@ -453,6 +548,32 @@ namespace FSTGame
         public void ClearCache()
         {
             _cache.Clear();
+        }
+
+        /// <summary>
+        /// 预热：预加载指定的 keys 到缓存
+        /// </summary>
+        /// <param name="hotKeys">需要预加载的热点键</param>
+        public void Preheat(IEnumerable<string> hotKeys)
+        {
+            if (hotKeys == null)
+                return;
+
+            foreach (var key in hotKeys)
+            {
+                if (!string.IsNullOrEmpty(key))
+                {
+                    GetValue(key); // 触发缓存
+                }
+            }
+        }
+
+        /// <summary>
+        /// 预热所有数据（慢，仅在内存充裕时使用）
+        /// </summary>
+        public void PreheatAll()
+        {
+            Preheat(_keyOffsetMap.Keys);
         }
 
         /// <summary>
@@ -787,6 +908,7 @@ namespace FSTGame
                 {
                     CloseDataStream();
                     _cache?.Dispose();
+                    _rwLock?.Dispose();
                 }
                 _disposed = true;
             }
