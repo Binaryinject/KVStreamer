@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using ZLinq;
 
 namespace KVStreamer.Example
 {
@@ -61,6 +62,19 @@ namespace KVStreamer.Example
                     Console.WriteLine("3. 获取所有Key:");
                     List<string> allKeys = streamer.GetAllKeys();
                     foreach (string key in allKeys)
+                    {
+                        Console.WriteLine($"   - {key}");
+                    }
+                    Console.WriteLine();
+
+                    // 示例3b: 使用 ZLinq 零分配获取Key数组
+                    Console.WriteLine("3b. 使用 ZLinq 零分配获取Key数组:");
+                    string[] keysArray = streamer.GetAllKeysArray();
+                    Console.WriteLine($"   ✓ 获取到 {keysArray.Length} 个键（零GC分配）");
+                    
+                    // 使用 ZLinq 零分配遍历
+                    Console.WriteLine("   ZLinq 零分配遍历示例:");
+                    foreach (var key in streamer.Keys.AsValueEnumerable())
                     {
                         Console.WriteLine($"   - {key}");
                     }

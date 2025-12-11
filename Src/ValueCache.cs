@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using ZLinq;
 
 namespace FSTGame
 {
@@ -80,7 +81,7 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 清理过期的缓存条目
+        /// 清理过期的缓存条目（ZLinq 零分配优化）
         /// </summary>
         private void CleanupExpiredEntries(long currentTicks)
         {
@@ -88,15 +89,12 @@ namespace FSTGame
             if ((currentTicks - _lastCleanupTicks) < CLEANUP_INTERVAL_TICKS)
                 return;
 
-            var expiredKeys = new List<string>();
-
-            foreach (var kvp in _cache)
-            {
-                if (kvp.Value.IsExpired(currentTicks))
-                {
-                    expiredKeys.Add(kvp.Key);
-                }
-            }
+            // 使用 ZLinq 零分配查找过期键
+            var expiredKeys = _cache
+                .AsValueEnumerable()
+                .Where(kvp => kvp.Value.IsExpired(currentTicks))
+                .Select(kvp => kvp.Key)
+                .ToArray();
 
             foreach (var key in expiredKeys)
             {

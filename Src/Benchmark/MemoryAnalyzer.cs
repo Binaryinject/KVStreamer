@@ -12,8 +12,10 @@ namespace KVStreamer.Benchmark
     /// </summary>
     public class MemoryAnalyzer
     {
-        private const string CSV_PATH = "Src\\Example\\chapter1.csv";
-        private const string BINARY_PATH = "Src\\Example\\chapter1.bytes";
+        // 使用项目根目录的相对路径
+        private static readonly string BASE_DIR = Path.GetFullPath(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "..", "..", "..", "..", ".."));
+        private static readonly string CSV_PATH = Path.Combine(BASE_DIR, "Src", "Example", "chapter1.csv");
+        private static readonly string BINARY_PATH = Path.Combine(BASE_DIR, "Src", "Example", "chapter1_compressed.bytes");
 
         public static void Main(string[] args)
         {
@@ -37,11 +39,27 @@ namespace KVStreamer.Benchmark
 
         private static void PrepareData()
         {
+            // 检查文件是否存在
+            if (!File.Exists(CSV_PATH))
+            {
+                Console.WriteLine($"错误：CSV文件不存在：{CSV_PATH}");
+                Console.WriteLine("请确保在Benchmark目录下存在测试数据文件。");
+                Environment.Exit(1);
+            }
+            
             if (!File.Exists(BINARY_PATH))
             {
                 Console.WriteLine("正在生成二进制文件...");
-                FSTGame.KVStreamer.CreateBinaryFromCSV(CSV_PATH, BINARY_PATH);
-                Console.WriteLine("生成完成！\n");
+                try
+                {
+                    FSTGame.KVStreamer.CreateBinaryFromCSV(CSV_PATH, BINARY_PATH);
+                    Console.WriteLine("生成完成！\n");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"错误：{ex.Message}");
+                    Console.WriteLine("尝试直接使用已有的二进制文件...");
+                }
             }
         }
 

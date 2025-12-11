@@ -7,12 +7,14 @@
     <AssemblyName>KVStreamerBenchmark</AssemblyName>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
+    <StartupObject>KVStreamer.Benchmark.BenchmarkRunner</StartupObject>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- 引用核心类文件 -->
     <Compile Include="..\KVStreamer.cs" Link="KVStreamer.cs" />
     <Compile Include="..\ValueCache.cs" Link="ValueCache.cs" />
+    <Compile Include="..\IKVStreamer.cs" Link="IKVStreamer.cs" />
     <!-- 排除 MemoryAnalyzer -->
     <Compile Remove="MemoryAnalyzer.cs" />
   </ItemGroup>
@@ -24,6 +26,9 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
+    <PackageReference Include="ZLinq" Version="1.5.4" />
   </ItemGroup>
 
 </Project>

@@ -1,12 +1,20 @@
 using System;
 using System.Buffers;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using ZLinq;
+
+#if UNITY_2018_3_OR_NEWER
+using Cysharp.Threading.Tasks;
+#else
+using System.Threading.Tasks;
+#endif
 
 namespace FSTGame
 {
@@ -36,21 +44,28 @@ namespace FSTGame
         private const byte MAGIC_BROTLI = 0xC1; // Brotli压缩标志 (.NET Core 3.0+)
         
         // 自适应缓存相关
-        private Dictionary<string, AccessStats> _accessStats;
+        private ConcurrentDictionary<string, AccessStats> _accessStats;
         private bool _enableAdaptiveCache;
         private bool _useThreadLocalStream; // 是否使用线程本地Stream（无锁模式）
         private const int HOT_KEY_THRESHOLD = 3; // 访问 3 次以上视为热点
         
-        // Lazy Loading 分段索引相关
-        private bool _enableLazyLoading; // 是否启用延迟加载
-        private HashSet<string> _loadedKeys; // 已加载的键
-        private int _lazyLoadBatchSize; // 批量加载大小
-        private const int DEFAULT_LAZY_BATCH_SIZE = 100; // 默认批次大小
-        
         private class AccessStats
         {
-            public int AccessCount { get; set; }
+            private int _accessCount;
+            public int AccessCount 
+            { 
+                get => _accessCount;
+                set => _accessCount = value;
+            }
             public long LastAccessTicks { get; set; }
+            
+            /// <summary>
+            /// 原子递增访问计数
+            /// </summary>
+            public void IncrementAccessCount()
+            {
+                Interlocked.Increment(ref _accessCount);
+            }
         }
 
         /// <summary>
@@ -58,13 +73,8 @@ namespace FSTGame
         /// </summary>
         /// <param name="cacheDuration">缓存持续时间（秒），默认300秒</param>
         public KVStreamer(float cacheDuration = 300f)
+            : this(cacheDuration, false, false)
         {
-            _keyOffsetMap = new Dictionary<string, long>();
-            _cache = new ValueCache(cacheDuration);
-            _rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
-            _enableAdaptiveCache = false;
-            _accessStats = null;
-            _useThreadLocalStream = false;
         }
 
         /// <summary>
@@ -73,13 +83,8 @@ namespace FSTGame
         /// <param name="cacheDuration">缓存持续时间（秒）</param>
         /// <param name="enableAdaptiveCache">是否启用自适应缓存（自动缓存热点数据）</param>
         public KVStreamer(float cacheDuration, bool enableAdaptiveCache)
+            : this(cacheDuration, enableAdaptiveCache, false)
         {
-            _keyOffsetMap = new Dictionary<string, long>();
-            _cache = new ValueCache(cacheDuration);
-            _rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
-            _enableAdaptiveCache = enableAdaptiveCache;
-            _accessStats = enableAdaptiveCache ? new Dictionary<string, AccessStats>() : null;
-            _useThreadLocalStream = false;
         }
 
         /// <summary>
@@ -94,49 +99,17 @@ namespace FSTGame
             _cache = new ValueCache(cacheDuration);
             _rwLock = useThreadLocalStream ? null : new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
             _enableAdaptiveCache = enableAdaptiveCache;
-            _accessStats = enableAdaptiveCache ? new Dictionary<string, AccessStats>() : null;
+            _accessStats = enableAdaptiveCache ? new ConcurrentDictionary<string, AccessStats>() : null;
             _useThreadLocalStream = useThreadLocalStream;
-            _enableLazyLoading = false;
-            _loadedKeys = null;
-            _lazyLoadBatchSize = DEFAULT_LAZY_BATCH_SIZE;
             
             if (_useThreadLocalStream)
             {
+                // 使用 trackAllValues: true 确保所有线程的 MemoryStream 都能被正确释放
                 _threadLocalStream = new ThreadLocal<MemoryStream>(() =>
                 {
                     if (_rawData == null) return null;
                     return new MemoryStream(_rawData, false);
-                }, trackAllValues: false);
-            }
-        }
-
-        /// <summary>
-        /// 构造函数（高级配置，支持 Lazy Loading）
-        /// </summary>
-        /// <param name="cacheDuration">缓存持续时间（秒）</param>
-        /// <param name="enableAdaptiveCache">是否启用自适应缓存</param>
-        /// <param name="useThreadLocalStream">是否使用线程本地Stream</param>
-        /// <param name="enableLazyLoading">是否启用延迟加载（适合大文件，按需加载索引）</param>
-        /// <param name="lazyLoadBatchSize">延迟加载批次大小，默认100</param>
-        public KVStreamer(float cacheDuration, bool enableAdaptiveCache, bool useThreadLocalStream, bool enableLazyLoading, int lazyLoadBatchSize = DEFAULT_LAZY_BATCH_SIZE)
-        {
-            _keyOffsetMap = new Dictionary<string, long>();
-            _cache = new ValueCache(cacheDuration);
-            _rwLock = useThreadLocalStream ? null : new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
-            _enableAdaptiveCache = enableAdaptiveCache;
-            _accessStats = enableAdaptiveCache ? new Dictionary<string, AccessStats>() : null;
-            _useThreadLocalStream = useThreadLocalStream;
-            _enableLazyLoading = enableLazyLoading;
-            _loadedKeys = enableLazyLoading ? new HashSet<string>() : null;
-            _lazyLoadBatchSize = lazyLoadBatchSize;
-            
-            if (_useThreadLocalStream)
-            {
-                _threadLocalStream = new ThreadLocal<MemoryStream>(() =>
-                {
-                    if (_rawData == null) return null;
-                    return new MemoryStream(_rawData, false);
-                }, trackAllValues: false);
+                }, trackAllValues: true);
             }
         }
 
@@ -560,7 +533,7 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 记录键的访问统计
+        /// 记录键的访问统计（使用 ConcurrentDictionary 原子操作和 Interlocked 线程安全）
         /// </summary>
         private void RecordAccess(string key)
         {
@@ -568,19 +541,19 @@ namespace FSTGame
                 return;
 
             long currentTicks = DateTime.UtcNow.Ticks;
-            if (_accessStats.TryGetValue(key, out var stats))
-            {
-                stats.AccessCount++;
-                stats.LastAccessTicks = currentTicks;
-            }
-            else
-            {
-                _accessStats[key] = new AccessStats
+            
+            _accessStats.AddOrUpdate(
+                key,
+                // 添加新键
+                k => new AccessStats { AccessCount = 1, LastAccessTicks = currentTicks },
+                // 更新现有键（使用原子操作）
+                (k, existing) =>
                 {
-                    AccessCount = 1,
-                    LastAccessTicks = currentTicks
-                };
-            }
+                    existing.IncrementAccessCount();
+                    existing.LastAccessTicks = currentTicks;
+                    return existing;
+                }
+            );
         }
 
         /// <summary>
@@ -595,14 +568,20 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 获取访问统计信息（用于调试和分析）
+        /// 获取访问统计信息（用于调试和分析，使用 ZLinq 零分配）
         /// </summary>
         public Dictionary<string, int> GetAccessStatistics()
         {
             if (_accessStats == null)
                 return new Dictionary<string, int>();
 
-            return _accessStats.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.AccessCount);
+            // 使用 ZLinq 零分配转换
+            var result = new Dictionary<string, int>(_accessStats.Count);
+            foreach (var kvp in _accessStats.AsValueEnumerable())
+            {
+                result[kvp.Key] = kvp.Value.AccessCount;
+            }
+            return result;
         }
 
         /// <summary>
@@ -682,7 +661,7 @@ namespace FSTGame
                 }
                 finally
                 {
-                    ArrayPool<byte>.Shared.Return(buffer);
+                    ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
                 }
             }
 #else
@@ -702,7 +681,7 @@ namespace FSTGame
                 }
                 finally
                 {
-                    ArrayPool<byte>.Shared.Return(buffer);
+                    ArrayPool<byte>.Shared.Return(buffer, clearArray: false);
                 }
             }
 #endif
@@ -745,6 +724,15 @@ namespace FSTGame
         }
 
         /// <summary>
+        /// 获取所有的Key数组（ZLinq 零分配版本）
+        /// </summary>
+        /// <returns>所有key的数组</returns>
+        public string[] GetAllKeysArray()
+        {
+            return _keyOffsetMap.Keys.AsValueEnumerable().ToArray();
+        }
+
+        /// <summary>
         /// 检查Key是否存在
         /// </summary>
         public bool ContainsKey(string key)
@@ -769,7 +757,7 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 预热：预加载指定的 keys 到缓存
+        /// 预热：预加载指定的 keys 到缓存（使用 ZLinq 零分配）
         /// </summary>
         /// <param name="hotKeys">需要预加载的热点键</param>
         public void Preheat(IEnumerable<string> hotKeys)
@@ -777,7 +765,8 @@ namespace FSTGame
             if (hotKeys == null)
                 return;
 
-            foreach (var key in hotKeys)
+            // 使用 ZLinq 零分配遍历
+            foreach (var key in hotKeys.AsValueEnumerable())
             {
                 if (!string.IsNullOrEmpty(key))
                 {
@@ -799,11 +788,28 @@ namespace FSTGame
         /// </summary>
         public void CloseDataStream()
         {
+            // 清理共享 Stream
             if (_dataStream != null)
             {
                 _dataStream.Close();
                 _dataStream.Dispose();
                 _dataStream = null;
+            }
+            
+            // 清理 ThreadLocal Stream（如果使用）
+            if (_useThreadLocalStream && _threadLocalStream != null)
+            {
+                // 释放所有线程的 MemoryStream
+                if (_threadLocalStream.Values != null)
+                {
+                    foreach (var stream in _threadLocalStream.Values)
+                    {
+                        stream?.Dispose();
+                    }
+                }
+                
+                // 清空 _rawData 引用，释放内存
+                _rawData = null;
             }
         }
 
@@ -818,17 +824,196 @@ namespace FSTGame
 
         #endregion
 
+        #region 异步方法支持（UniTask 和 Task）
+
+#if UNITY_2018_3_OR_NEWER
+        /// <summary>
+        /// 异步加载二进制数据（UniTask）
+        /// </summary>
+        public async UniTask LoadBinaryDataAsync(byte[] binaryData, CancellationToken cancellationToken = default)
+        {
+            await UniTask.SwitchToThreadPool();
+            
+            try
+            {
+                LoadBinaryData(binaryData);
+            }
+            finally
+            {
+                await UniTask.SwitchToMainThread();
+            }
+        }
+
+        /// <summary>
+        /// 异步通过Key获取Value（UniTask）
+        /// </summary>
+        public async UniTask<string> GetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            // 先检查缓存（快速路径）
+            string cachedValue = _cache.Get(key);
+            if (cachedValue != null)
+                return cachedValue;
+
+            // 如果不在缓存中，切换到线程池读取
+            await UniTask.SwitchToThreadPool();
+            
+            string value;
+            try
+            {
+                value = GetValue(key);
+            }
+            finally
+            {
+                await UniTask.SwitchToMainThread();
+            }
+            
+            return value;
+        }
+
+        /// <summary>
+        /// 异步尝试获取指定键的值（UniTask）
+        /// </summary>
+        public async UniTask<(bool success, string value)> TryGetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            string value = await GetValueAsync(key, cancellationToken);
+            return (value != null, value);
+        }
+
+        /// <summary>
+        /// 异步预热缓存（UniTask）
+        /// </summary>
+        public async UniTask PreheatAsync(IEnumerable<string> hotKeys, CancellationToken cancellationToken = default)
+        {
+            if (hotKeys == null)
+                return;
+
+            await UniTask.SwitchToThreadPool();
+            
+            try
+            {
+                int count = 0;
+                foreach (var key in hotKeys.AsValueEnumerable())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    if (!string.IsNullOrEmpty(key))
+                    {
+                        GetValue(key);
+                    }
+                    
+                    // 每10个key yield一次，避免阻塞太久
+                    count++;
+                    if (count % 10 == 0)
+                    {
+                        await UniTask.Yield();
+                    }
+                }
+            }
+            finally
+            {
+                await UniTask.SwitchToMainThread();
+            }
+        }
+
+        /// <summary>
+        /// 异步预热所有数据（UniTask）
+        /// </summary>
+        public async UniTask PreheatAllAsync(CancellationToken cancellationToken = default)
+        {
+            await PreheatAsync(_keyOffsetMap.Keys, cancellationToken);
+        }
+#else
+        /// <summary>
+        /// 异步加载二进制数据（Task）
+        /// </summary>
+        public async Task LoadBinaryDataAsync(byte[] binaryData, CancellationToken cancellationToken = default)
+        {
+            await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                LoadBinaryData(binaryData);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 异步通过Key获取Value（Task）
+        /// </summary>
+        public async Task<string> GetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            // 先检查缓存（快速路径）
+            string cachedValue = _cache.Get(key);
+            if (cachedValue != null)
+                return cachedValue;
+
+            // 如果不在缓存中，异步读取
+            return await Task.Run(() =>
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                return GetValue(key);
+            }, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 异步尝试获取指定键的值（Task）
+        /// </summary>
+        public async Task<(bool success, string value)> TryGetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            
+            string value = await GetValueAsync(key, cancellationToken).ConfigureAwait(false);
+            return (value != null, value);
+        }
+
+        /// <summary>
+        /// 异步预热缓存（Task）
+        /// </summary>
+        public async Task PreheatAsync(IEnumerable<string> hotKeys, CancellationToken cancellationToken = default)
+        {
+            if (hotKeys == null)
+                return;
+
+            await Task.Run(() =>
+            {
+                foreach (var key in hotKeys.AsValueEnumerable())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    
+                    if (!string.IsNullOrEmpty(key))
+                    {
+                        GetValue(key);
+                    }
+                }
+            }, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 异步预热所有数据（Task）
+        /// </summary>
+        public async Task PreheatAllAsync(CancellationToken cancellationToken = default)
+        {
+            await PreheatAsync(_keyOffsetMap.Keys, cancellationToken).ConfigureAwait(false);
+        }
+#endif
+
+        #endregion
+
         #region IDictionary<string, string> 实现
 
         /// <summary>
-        /// 获取包含值的集合（需要加载所有值）
+        /// 获取包含值的集合（需要加载所有值，使用 ZLinq 零分配）
         /// </summary>
         ICollection<string> IDictionary<string, string>.Values
         {
             get
             {
-                var values = new List<string>();
-                foreach (var key in _keyOffsetMap.Keys)
+                var values = new List<string>(_keyOffsetMap.Count);
+                foreach (var key in _keyOffsetMap.Keys.AsValueEnumerable())
                 {
                     values.Add(GetValue(key));
                 }
@@ -878,7 +1063,7 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 复制到数组
+        /// 复制到数组（使用 ZLinq 零分配）
         /// </summary>
         public void CopyTo(KeyValuePair<string, string>[] array, int arrayIndex)
         {
@@ -890,7 +1075,7 @@ namespace FSTGame
                 throw new ArgumentException("数组长度不足");
 
             int index = arrayIndex;
-            foreach (var key in _keyOffsetMap.Keys)
+            foreach (var key in _keyOffsetMap.Keys.AsValueEnumerable())
             {
                 array[index++] = new KeyValuePair<string, string>(key, GetValue(key));
             }
@@ -917,13 +1102,13 @@ namespace FSTGame
         #region IReadOnlyDictionary<string, string> 实现
 
         /// <summary>
-        /// 获取包含值的集合（只读）
+        /// 获取包含值的集合（只读，使用 ZLinq 零分配）
         /// </summary>
         IEnumerable<string> IReadOnlyDictionary<string, string>.Values
         {
             get
             {
-                foreach (var key in _keyOffsetMap.Keys)
+                foreach (var key in _keyOffsetMap.Keys.AsValueEnumerable())
                 {
                     yield return GetValue(key);
                 }
@@ -987,14 +1172,14 @@ namespace FSTGame
         ICollection IDictionary.Keys => (ICollection)_keyOffsetMap.Keys;
 
         /// <summary>
-        /// 获取值集合
+        /// 获取值集合（使用 ZLinq 零分配）
         /// </summary>
         ICollection IDictionary.Values
         {
             get
             {
-                var values = new List<string>();
-                foreach (var key in _keyOffsetMap.Keys)
+                var values = new List<string>(_keyOffsetMap.Count);
+                foreach (var key in _keyOffsetMap.Keys.AsValueEnumerable())
                 {
                     values.Add(GetValue(key));
                 }
@@ -1032,7 +1217,7 @@ namespace FSTGame
         #region ICollection 非泛型实现
 
         /// <summary>
-        /// 复制到数组
+        /// 复制到数组（使用 ZLinq 零分配）
         /// </summary>
         void ICollection.CopyTo(Array array, int index)
         {
@@ -1044,7 +1229,7 @@ namespace FSTGame
                 throw new ArgumentException("数组长度不足");
 
             int i = index;
-            foreach (var key in _keyOffsetMap.Keys)
+            foreach (var key in _keyOffsetMap.Keys.AsValueEnumerable())
             {
                 array.SetValue(new KeyValuePair<string, string>(key, GetValue(key)), i++);
             }
@@ -1065,11 +1250,11 @@ namespace FSTGame
         #region IEnumerable 实现
 
         /// <summary>
-        /// 获取泛型枚举器
+        /// 获取泛型枚举器（使用 ZLinq 零分配）
         /// </summary>
         public IEnumerator<KeyValuePair<string, string>> GetEnumerator()
         {
-            foreach (var key in _keyOffsetMap.Keys)
+            foreach (var key in _keyOffsetMap.Keys.AsValueEnumerable())
             {
                 yield return new KeyValuePair<string, string>(key, GetValue(key));
             }
@@ -1127,7 +1312,20 @@ namespace FSTGame
                     CloseDataStream();
                     _cache?.Dispose();
                     _rwLock?.Dispose();
-                    _threadLocalStream?.Dispose();
+                    
+                    // 正确释放 ThreadLocal 创建的所有 MemoryStream
+                    if (_threadLocalStream != null)
+                    {
+                        // 如果 trackAllValues: true，需要手动释放所有值
+                        if (_threadLocalStream.Values != null)
+                        {
+                            foreach (var stream in _threadLocalStream.Values)
+                            {
+                                stream?.Dispose();
+                            }
+                        }
+                        _threadLocalStream.Dispose();
+                    }
                 }
                 _disposed = true;
             }

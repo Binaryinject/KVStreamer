@@ -9,12 +9,12 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>KVStreamer</PackageId>
-    <Version>1.5.1</Version>
+    <Version>1.7.3</Version>
     <Authors>Binaryinject</Authors>
     <Company>Binaryinject</Company>
     <Product>KVStreamer</Product>
-    <Description>A high-performance C# library for Unity that provides streaming key-value pair reading with GZip compression support. Supports generating compact binary format from CSV files and features an intelligent cache system with time control. Fully compatible with Unity 2019.1+. Now supports generic types with KVStreamer&lt;TValue&gt;!</Description>
-    <PackageTags>Unity;CSV;Binary;KeyValue;Streaming;Cache;Performance;GZip;Compression;Generic;Span</PackageTags>
+    <Description>A high-performance C# library for Unity that provides streaming key-value pair reading with GZip compression support. Supports generating compact binary format from CSV files and features an intelligent cache system with time control. Fully compatible with Unity 2019.1+. Now supports generic types with KVStreamer&lt;TValue&gt;, ZLinq zero-allocation LINQ, and UniTask async/await integration!</Description>
+    <PackageTags>Unity;CSV;Binary;KeyValue;Streaming;Cache;Performance;GZip;Compression;Generic;Span;ZLinq;ZeroAllocation;UniTask;Async;Await</PackageTags>
     <PackageProjectUrl>https://github.com/Binaryinject/KVStreamer</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Binaryinject/KVStreamer</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -22,7 +22,150 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
-    <PackageReleaseNotes>Version 1.5.1 - Unity Support Enhancements:
+    <PackageReleaseNotes>Version 1.7.3 - Critical Memory Leak Fix in CloseDataStream:
+⚠️ 严重 Bug 修复：CloseDataStream() 内存泄漏
+
+问题描述：
+- CloseDataStream() 只清理了 _dataStream
+- 没有清理 _rawData 和 ThreadLocal 创建的 MemoryStream
+- 导致 ThreadLocal 模式下内存泄漏
+- 重复调用 LoadBinaryData 会导致内存累积
+
+修复内容：
+1. 在 CloseDataStream() 中释放所有 ThreadLocal 的 MemoryStream
+2. 清空 _rawData 引用释放内存
+3. 确保重复加载数据时正确清理旧数据
+
+影响场景：
+- 使用 ThreadLocal 模式（useThreadLocalStream: true）
+- 多次调用 LoadBinaryData() 加载不同数据
+- 长时间运行的应用
+
+泄漏示例：
+```csharp
+var streamer = new KVStreamer(300f, false, true);
+streamer.LoadBinaryData(data1);  // 10MB
+streamer.LoadBinaryData(data2);  // 10MB
+// v1.7.2: 泄漏 10MB (data1 未释放)
+// v1.7.3: 泄漏 0MB (正确清理)
+```
+
+升级建议：
+如果使用 ThreadLocal 模式，强烈建议立即升级！
+
+Version 1.7.2 - Critical Resource Leak Fix:
+⚠️ 严重 Bug 修复：ThreadLocal&lt;MemoryStream&gt; 资源泄漏
+
+问题描述：
+- 原代码使用 trackAllValues: false
+- 导致 ThreadLocal 创建的 MemoryStream 无法被正确释放
+- 多线程场景下会造成严重内存泄漏
+
+修复内容：
+1. 将 trackAllValues 修改为 true
+2. Dispose() 中手动释放所有线程的 MemoryStream
+3. 添加 foreach 遍历 _threadLocalStream.Values
+
+影响范围：
+- 使用 useThreadLocalStream: true 的用户
+- 多线程/高并发场景
+- 长时间运行的应用
+
+升级建议：
+如果使用了 ThreadLocal 模式，强烈建议立即升级！
+这是一个严重的内存泄漏 bug，可能导致应用崩溃。
+
+Version 1.7.1 - Critical Bug Fixes:
+- 修复：KVStreamer&lt;TValue&gt;.TryGetValueAsync() 值类型判断错误
+  * 原代码：value != null 对值类型永远为 true
+  * 修复后：使用 EqualityComparer&lt;TValue&gt; 正确判断
+- 修复：PreheatAsync() 性能问题
+  * 原代码：每个 key 都 yield，导致性能下降
+  * 修复后：每10个 key yield 一次
+- 增强：TryGetValueAsync() 异常处理
+  * 添加 try-catch 避免转换器异常
+
+Bug 影响：
+- 值类型（int, long, float 等）的 TryGetValueAsync 可能返回错误结果
+- PreheatAsync 性能比预期低 10 倍
+
+建议更新：
+如果使用 v1.7.0 并使用了泛型异步 API，强烈建议升级到 v1.7.1
+
+Version 1.7.0 - Async/Await and UniTask Support:
+- 新增：UniTask 2.5.10 异步支持（Unity 专用）
+- 新增：标准 Task 异步支持（.NET Core/.NET Standard）
+- 新增：IKVStreamerAsync&lt;TValue&gt; 异步接口
+- 新增：LoadBinaryDataAsync() 异步加载
+- 新增：GetValueAsync() 异步读取
+- 新增：TryGetValueAsync() 异步尝试读取
+- 新增：PreheatAsync() 异步预热
+- 新增：PreheatAllAsync() 异步全量预热
+- 支持 CancellationToken 取消操作
+
+异步特性：
+- Unity 环境自动使用 UniTask（零 GC、高性能）
+- 非 Unity 环境使用标准 Task
+- 支持主线程/线程池自动切换
+- 缓存命中时无异步开销（快速路径）
+- 泛型 KVStreamer&lt;TValue&gt; 完全支持异步
+
+使用示例（Unity + UniTask）：async 加载、读取、预热数据，泛型异步转换
+
+Version 1.6.1 - Bug Fixes and Performance Improvements:
+- 修复：AccessStats.AccessCount 线程安全问题（使用 Interlocked.Increment）
+- 优化：ArrayPool.Return 添加 clearArray: false 参数（提升性能）
+- 优化：ICollection.CopyTo 使用 ZLinq 零分配
+- 优化：GetEnumerator 使用 ZLinq 零分配
+- 优化：IReadOnlyDictionary.Values 使用 ZLinq 零分配
+- 优化：IDictionary.Values 使用 ZLinq 零分配
+
+Bug 修复详情：
+- 在高并发场景下，AccessCount++ 可能导致竞态条件
+- 现使用 Interlocked.Increment 原子操作确保线程安全
+
+性能提升：
+- ArrayPool 返回时无需清除缓冲区，减少开销
+- 所有枚举操作均使用 ZLinq 零分配
+
+Version 1.6.0 - ZLinq Zero-Allocation Integration:
+- 集成 Cysharp/ZLinq 1.5.4 零分配 LINQ 库
+- 使用 AsValueEnumerable() 实现零分配遍历
+- 优化 GetAccessStatistics()：零分配转换
+- 优化 Preheat()：零分配遍历
+- 优化 ValueCache.CleanupExpiredEntries()：零分配查找
+- 优化 IDictionary.Values 和 CopyTo()：零分配遍历
+- 新增 GetAllKeysArray()：零分配获取键数组
+- 升级 System.Memory 到 4.6.3
+- 升级 System.Buffers 到 4.6.1
+
+ZLinq 性能优势：
+- 零分配的 LINQ 操作链
+- 比传统 LINQ 更高的基础性能
+- 兼容 .NET Standard 2.0 和 Unity
+- 所有 .NET 平台可用 .NET 10 的 LINQ 操作符
+
+使用示例：
+// 零分配遍历
+foreach (var key in streamer.Keys.AsValueEnumerable()) { }
+
+// 零分配获取键数组
+string[] keys = streamer.GetAllKeysArray();
+
+Version 1.5.2 - Code Quality Improvements:
+- Optimized constructor chain to reduce code duplication (43 lines removed)
+- Changed AccessStats storage to ConcurrentDictionary for thread-safety
+- Improved RecordAccess to use AddOrUpdate atomic operation
+- Optimized ValueCache.CleanupExpiredEntries with LINQ
+- Removed unused Lazy Loading fields (simplified codebase)
+- Better code consistency and maintainability
+
+Performance Impact:
+- Slightly better thread-safety in adaptive cache mode
+- Reduced code surface = fewer bugs
+- No breaking changes
+
+Version 1.5.1 - Unity Support Enhancements:
 - Unified conditional compilation symbols for consistency
 - Added comprehensive Unity 6.3 support documentation
 - Clarified Brotli limitation across all Unity versions
@@ -126,9 +269,13 @@ Version 1.1.0:
 
   <ItemGroup>
     <!-- 为 netstandard2.0 添加必要的 NuGet 包 -->
-    <PackageReference Include="System.Memory" Version="4.5.5" />
-    <PackageReference Include="System.Buffers" Version="4.5.1" />
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
     <PackageReference Include="System.Threading.Tasks.Extensions" Version="4.5.4" />
+    <!-- ZLinq 零分配 LINQ -->
+    <PackageReference Include="ZLinq" Version="1.5.4" />
+    <!-- UniTask 异步支持 -->
+    <PackageReference Include="UniTask" Version="2.5.10" />
   </ItemGroup>
 
   <ItemGroup>

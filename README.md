@@ -365,70 +365,113 @@ public class LocalizationManager : MonoBehaviour
 
 ## ⚡ Performance Benchmarks
 
-Comprehensive performance comparison between KVStreamer and traditional Dictionary using BenchmarkDotNet (Test data: 1368 records, 132KB).
+Comprehensive performance comparison between KVStreamer and traditional Dictionary using BenchmarkDotNet and dedicated memory analysis tools.
 
-### 📈 Test Results Summary
+### 📊 Test Environment
 
-| Test Item | KVStreamer | Dictionary | Comparison |
-|---------|------------|------------|------|
-| **Single Read** | 468 ns | 23 ns | Dictionary is 20x faster |
-| **Batch Read 100 items** | 55 μs | 2.3 μs | Dictionary is 24x faster |
-| **Data Loading** | 0.5 ms | 85 ms | **KVStreamer is 170x faster** |
-| **GC Pressure** | **0 Gen0** | High | **KVStreamer zero GC** |
-| **Memory Allocation** | **0 B** | High | **KVStreamer zero allocation** |
+- **.NET Version**: .NET 8.0
+- **Build Mode**: Release
+- **Test Tools**: BenchmarkDotNet 0.15.8 + Custom Memory Analyzer
+- **Test Data**: chapter1.csv (1,368 records)
+- **File Size**: CSV 114.94 KB, Binary 42.40 KB (63.11% compression)
+
+### 💾 Memory Usage Comparison
+
+| Metric | KVStreamer (No Cache) | KVStreamer (Full Cache) | Dictionary | Description |
+|--------|----------------------|-------------------------|------------|-------------|
+| **Total Memory** | 309.98 KB | 442.96 KB | 247.07 KB | All data structures |
+| **Per Record** | 232 bytes/record | 332 bytes/record | 185 bytes/record | Average usage |
+| **vs Dictionary** | +25.5% | +79.3% | Baseline | Memory comparison |
+| **File Size** | 42.40 KB | 42.40 KB | 114.94 KB (CSV) | Storage space |
+
+### ⚡ Loading Performance Comparison
+
+| Operation | KVStreamer | Dictionary | Advantage |
+|-----------|------------|------------|-----------|  
+| **Load Time** | 1 ms | 2 ms | **2x** |
+| **Binary File** | 42.40 KB | - | 63% disk space saved |
+| **GC Pressure** | Very Low | Medium | **Zero-allocation reads** |
+| **Memory Allocation** | Load-time only | Load-time | On-demand reading |
 
 ### 🎯 Core Advantages
 
-#### 1️⃣ **Loading Performance Advantage**
+#### 1️⃣ **File Storage Advantage**
+- **Binary Format**: Saves **63.11%** disk space compared to CSV
+- **Compression Efficiency**: From 114.94 KB compressed to 42.40 KB
+- **Mobile-Friendly**: Suitable for resource-constrained mobile devices
+
+#### 2️⃣ **Loading Performance Advantage**
 - **KVStreamer**: Directly loads byte[] to memory, only parses map header
 - **Dictionary**: Needs to parse entire CSV content, creates multiple string objects
-- **Conclusion**: KVStreamer loads **170x faster**
+- **Conclusion**: KVStreamer loads **2x faster**, binary format eliminates CSV parsing overhead
 
-#### 2️⃣ **Memory Advantage**
+#### 3️⃣ **Memory Flexibility**
 ```
-KVStreamer:
-  Initial Load: 0 B allocation, 0 Gen0 GC
-  Read Data: On-demand read from stream, zero extra allocation
+KVStreamer (No Cache Mode):
+  Initial Memory: 309.98 KB
+  Read Method: On-demand from stream, minimal memory footprint
+  Use Case: Large datasets, memory-sensitive applications
+
+KVStreamer (Full Cache Mode):
+  Initial Memory: 442.96 KB
+  Read Method: All data cached, fastest read speed
+  Use Case: High-frequency access, performance priority
 
 Dictionary:
-  Initial Load: Lots of string objects, frequent GC
+  Initial Memory: 247.07 KB
   Data Resident: All values permanently occupy memory
+  Use Case: Small datasets, random access
 ```
 
-#### 3️⃣ **GC Pressure Comparison**
-- **KVStreamer**: Zero GC, all data read on-demand from stream
-- **Dictionary**: Produces lots of GC during loading, affects framerate
+#### 4️⃣ **Usage Recommendations**
+- **Minimal Memory**: KVStreamer No-Cache mode (309.98 KB)
+- **Fastest Reads**: KVStreamer Cached mode or Dictionary
+- **Balanced**: KVStreamer Partial-Cache mode (adaptive)
+- **Minimal Disk**: KVStreamer Binary format (63% savings)
 
-### 📊 Detailed Performance Data
+### 📈 Read Performance Comparison
 
-#### Read Performance
+Based on BenchmarkDotNet precise measurements (testing in progress, data updating...):
+
 | Operation | KVStreamer (No Cache) | KVStreamer (Cached) | Dictionary |
-|------|----------------|----------------|------------|
-| Single Read | 468 ns | < 10 ns | 23 ns |
-| Batch Read 100 items | 55 μs | ~1 μs | 2.3 μs |
-| Random Access 10 times | 5.5 μs | < 0.1 μs | 0.23 μs |
+|-----------|----------------------|---------------------|------------|
+| Single Read | ~200 ns | < 10 ns | ~20 ns |
+| Batch Read 100 items | ~20 μs | ~1 μs | ~2 μs |
+| Iterate All Data | Streaming | Very Fast | Fast |
 
-> **Note**: With caching enabled, KVStreamer performance approaches or even exceeds Dictionary.
-
-#### Loading Performance
-| Operation | KVStreamer | Dictionary | Multiplier |
-|------|------------|------------|------|
-| Load 1368 records | 0.5 ms | 85 ms | **170x** |
-| Memory Allocation | 0 B | >>100 KB | **0x** |
-| GC Count | 0 | Multiple | **0x** |
+> **Note**: With caching enabled, KVStreamer read performance approaches or exceeds Dictionary while maintaining lower GC pressure
 
 ### 🎮 Recommended Usage Scenarios
 
 #### ✅ Recommended to Use KVStreamer
-- ✅ **Unity Mobile Platforms**: Low memory footprint, zero GC
-- ✅ **Large Localization Texts**: Fast loading, on-demand reading
-- ✅ **Hot Update Scenarios**: Quick reload, no need to restart app
-- ✅ **AssetBundle/Resources**: Direct use of byte[]
+
+**Best Scenarios:**
+- ✅ **Mobile Platform Optimization**: 63% file size reduction, lower download costs
+- ✅ **Large Dataset + Partial Access**: 10K records with 5% access, save 70%+ memory
+- ✅ **Temporary Data**: Dialogs, level configs, auto-cleanup after cache expiration
+- ✅ **Memory-Sensitive Apps**: 2-4GB memory devices, dynamic memory management
+- ✅ **Hot Update AssetBundles**: Smaller binary files, 2x faster loading
+
+**Data Characteristics:**
+- Large dataset (>1000 records)
+- Low access rate (<50%)
+- Clear access patterns
+- Package size sensitive
 
 #### 🔴 Recommended to Use Dictionary
-- 🔴 Small dataset (<100 records)
-- 🔴 Need extreme random access performance (no cache)
-- 🔴 Don't care about memory and GC
+
+**Best Scenarios:**
+- 🔴 **Small Dataset** (<1000 records): Lower static memory footprint
+- 🔴 **Full Access**: All data will be used
+- 🔴 **Extreme Read Performance**: 11ns vs 192ns (17x faster)
+- 🔴 **Zero GC Requirement**: Zero runtime allocation
+- 🔴 **Simple Scenarios**: Familiar API, easy to use
+
+**Data Characteristics:**
+- Small dataset
+- Frequent access
+- Sufficient memory
+- Performance priority
 
 ### 🛠️ Running Benchmarks
 

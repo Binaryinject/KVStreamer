@@ -13,6 +13,7 @@
     <!-- 引用核心类文件 -->
     <Compile Include="..\KVStreamer.cs" Link="KVStreamer.cs" />
     <Compile Include="..\ValueCache.cs" Link="ValueCache.cs" />
+    <Compile Include="..\IKVStreamer.cs" Link="IKVStreamer.cs" />
     <!-- 排除 Benchmark 文件 -->
     <Compile Remove="KVStreamerBenchmark.cs" />
   </ItemGroup>
@@ -20,6 +21,12 @@
   <ItemGroup>
     <!-- 包含测试数据文件 -->
     <None Include="..\Example\chapter1.csv" CopyToOutputDirectory="PreserveNewest" Link="Src\Example\chapter1.csv" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.Memory" Version="4.6.3" />
+    <PackageReference Include="System.Buffers" Version="4.6.1" />
+    <PackageReference Include="ZLinq" Version="1.5.4" />
   </ItemGroup>
 
 </Project>

@@ -1,13 +1,20 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
+
+#if UNITY_2018_3_OR_NEWER
+using Cysharp.Threading.Tasks;
+#else
+using System.Threading.Tasks;
+#endif
 
 namespace FSTGame
 {
     /// <summary>
-    /// 泛型 KV 流式读取器（支持自定义值类型转换）
+    /// 泛型 KV 流式读取器（支持自定义值类型转换和异步）
     /// </summary>
     /// <typeparam name="TValue">值的类型</typeparam>
-    public class KVStreamer<TValue> : IKVStreamer<TValue>
+    public class KVStreamer<TValue> : IKVStreamer<TValue>, IKVStreamerAsync<TValue>
     {
         private readonly KVStreamer _innerStreamer;
         private readonly Func<string, TValue> _converter;
@@ -170,6 +177,134 @@ namespace FSTGame
         {
             _innerStreamer?.Dispose();
         }
+
+        #region 异步方法实现
+
+#if UNITY_2018_3_OR_NEWER
+        /// <summary>
+        /// 异步加载二进制数据（UniTask）
+        /// </summary>
+        public async UniTask LoadBinaryDataAsync(byte[] binaryData, CancellationToken cancellationToken = default)
+        {
+            await _innerStreamer.LoadBinaryDataAsync(binaryData, cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步通过Key获取Value（UniTask）
+        /// </summary>
+        public async UniTask<TValue> GetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            string rawValue = await _innerStreamer.GetValueAsync(key, cancellationToken);
+            if (rawValue == null)
+                return default(TValue);
+
+            try
+            {
+                return _converter(rawValue);
+            }
+            catch
+            {
+                return default(TValue);
+            }
+        }
+
+        /// <summary>
+        /// 异步尝试获取指定键的值（UniTask）
+        /// </summary>
+        public async UniTask<(bool success, TValue value)> TryGetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                TValue value = await GetValueAsync(key, cancellationToken);
+                // 对于值类型，检查是否为默认值；对于引用类型，检查是否为 null
+                bool isDefault = EqualityComparer<TValue>.Default.Equals(value, default(TValue));
+                return (!isDefault, value);
+            }
+            catch
+            {
+                return (false, default(TValue));
+            }
+        }
+
+        /// <summary>
+        /// 异步预热缓存（UniTask）
+        /// </summary>
+        public async UniTask PreheatAsync(IEnumerable<string> hotKeys, CancellationToken cancellationToken = default)
+        {
+            await _innerStreamer.PreheatAsync(hotKeys, cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步预热所有数据（UniTask）
+        /// </summary>
+        public async UniTask PreheatAllAsync(CancellationToken cancellationToken = default)
+        {
+            await _innerStreamer.PreheatAllAsync(cancellationToken);
+        }
+#else
+        /// <summary>
+        /// 异步加载二进制数据（Task）
+        /// </summary>
+        public async Task LoadBinaryDataAsync(byte[] binaryData, CancellationToken cancellationToken = default)
+        {
+            await _innerStreamer.LoadBinaryDataAsync(binaryData, cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步通过Key获取Value（Task）
+        /// </summary>
+        public async Task<TValue> GetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            string rawValue = await _innerStreamer.GetValueAsync(key, cancellationToken);
+            if (rawValue == null)
+                return default(TValue);
+
+            try
+            {
+                return _converter(rawValue);
+            }
+            catch
+            {
+                return default(TValue);
+            }
+        }
+
+        /// <summary>
+        /// 异步尝试获取指定键的值（Task）
+        /// </summary>
+        public async Task<(bool success, TValue value)> TryGetValueAsync(string key, CancellationToken cancellationToken = default)
+        {
+            try
+            {
+                TValue value = await GetValueAsync(key, cancellationToken);
+                // 对于值类型，检查是否为默认值；对于引用类型，检查是否为 null
+                bool isDefault = EqualityComparer<TValue>.Default.Equals(value, default(TValue));
+                return (!isDefault, value);
+            }
+            catch
+            {
+                return (false, default(TValue));
+            }
+        }
+
+        /// <summary>
+        /// 异步预热缓存（Task）
+        /// </summary>
+        public async Task PreheatAsync(IEnumerable<string> hotKeys, CancellationToken cancellationToken = default)
+        {
+            await _innerStreamer.PreheatAsync(hotKeys, cancellationToken);
+        }
+
+        /// <summary>
+        /// 异步预热所有数据（Task）
+        /// </summary>
+        public async Task PreheatAllAsync(CancellationToken cancellationToken = default)
+        {
+            await _innerStreamer.PreheatAllAsync(cancellationToken);
+        }
+#endif
+
+        #endregion
     }
 
     /// <summary>
