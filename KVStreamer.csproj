@@ -9,12 +9,12 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>KVStreamer</PackageId>
-    <Version>1.4.1</Version>
+    <Version>1.5.0</Version>
     <Authors>Binaryinject</Authors>
     <Company>Binaryinject</Company>
     <Product>KVStreamer</Product>
-    <Description>A high-performance C# library for Unity that provides streaming key-value pair reading with GZip compression support. Supports generating compact binary format from CSV files and features an intelligent cache system with time control. Fully compatible with Unity 2019.1+.</Description>
-    <PackageTags>Unity;CSV;Binary;KeyValue;Streaming;Cache;Performance;GZip;Compression</PackageTags>
+    <Description>A high-performance C# library for Unity that provides streaming key-value pair reading with GZip compression support. Supports generating compact binary format from CSV files and features an intelligent cache system with time control. Fully compatible with Unity 2019.1+. Now supports generic types with KVStreamer&lt;TValue&gt;!</Description>
+    <PackageTags>Unity;CSV;Binary;KeyValue;Streaming;Cache;Performance;GZip;Compression;Generic;Span</PackageTags>
     <PackageProjectUrl>https://github.com/Binaryinject/KVStreamer</PackageProjectUrl>
     <RepositoryUrl>https://github.com/Binaryinject/KVStreamer</RepositoryUrl>
     <RepositoryType>git</RepositoryType>
@@ -22,7 +22,28 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
-    <PackageReleaseNotes>Version 1.4.1 - Unity 6+ Optimization:
+    <PackageReleaseNotes>Version 1.5.0 - P2 Optimizations (Generic Support):
+- Added generic type support with KVStreamer&lt;TValue&gt;
+- IKVStreamer&lt;TValue&gt; interface for type-safe access
+- Built-in converters: Int32, Int64, Single, Double, Boolean
+- Custom converter support for any type
+- JSON converter support (.NET Core 3.0+)
+- KVStreamer now implements IKVStreamer&lt;string&gt;
+- Lazy loading preparation (field infrastructure added)
+- Zero breaking changes - fully backward compatible
+
+Generic Usage Examples:
+// Integer values
+var intStreamer = new KVStreamer&lt;int&gt;(KVConverters.Int32);
+intStreamer.LoadBinaryData(data);
+int value = intStreamer["key"];
+
+// Custom types
+var customStreamer = new KVStreamer&lt;MyType&gt;(
+    s =&gt; JsonSerializer.Deserialize&lt;MyType&gt;(s)
+);
+
+Version 1.4.1 - Unity 6+ Optimization:
 - Added Span&lt;T&gt; support for Unity 6.0+ (when using Mono backend)
 - Unity 6+ with .NET Standard 2.1 can now use stackalloc and Span&lt;T&gt;
 - 40-60% less GC allocation in Unity 6+ projects

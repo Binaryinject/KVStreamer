@@ -14,6 +14,7 @@ namespace FSTGame
     /// KV流式读取器主类
     /// </summary>
     public class KVStreamer : 
+        IKVStreamer<string>,
         IDisposable,
         IDictionary<string, string>,
         IReadOnlyDictionary<string, string>,
@@ -39,6 +40,12 @@ namespace FSTGame
         private bool _enableAdaptiveCache;
         private bool _useThreadLocalStream; // 是否使用线程本地Stream（无锁模式）
         private const int HOT_KEY_THRESHOLD = 3; // 访问 3 次以上视为热点
+        
+        // Lazy Loading 分段索引相关
+        private bool _enableLazyLoading; // 是否启用延迟加载
+        private HashSet<string> _loadedKeys; // 已加载的键
+        private int _lazyLoadBatchSize; // 批量加载大小
+        private const int DEFAULT_LAZY_BATCH_SIZE = 100; // 默认批次大小
         
         private class AccessStats
         {
@@ -89,6 +96,39 @@ namespace FSTGame
             _enableAdaptiveCache = enableAdaptiveCache;
             _accessStats = enableAdaptiveCache ? new Dictionary<string, AccessStats>() : null;
             _useThreadLocalStream = useThreadLocalStream;
+            _enableLazyLoading = false;
+            _loadedKeys = null;
+            _lazyLoadBatchSize = DEFAULT_LAZY_BATCH_SIZE;
+            
+            if (_useThreadLocalStream)
+            {
+                _threadLocalStream = new ThreadLocal<MemoryStream>(() =>
+                {
+                    if (_rawData == null) return null;
+                    return new MemoryStream(_rawData, false);
+                }, trackAllValues: false);
+            }
+        }
+
+        /// <summary>
+        /// 构造函数（高级配置，支持 Lazy Loading）
+        /// </summary>
+        /// <param name="cacheDuration">缓存持续时间（秒）</param>
+        /// <param name="enableAdaptiveCache">是否启用自适应缓存</param>
+        /// <param name="useThreadLocalStream">是否使用线程本地Stream</param>
+        /// <param name="enableLazyLoading">是否启用延迟加载（适合大文件，按需加载索引）</param>
+        /// <param name="lazyLoadBatchSize">延迟加载批次大小，默认100</param>
+        public KVStreamer(float cacheDuration, bool enableAdaptiveCache, bool useThreadLocalStream, bool enableLazyLoading, int lazyLoadBatchSize = DEFAULT_LAZY_BATCH_SIZE)
+        {
+            _keyOffsetMap = new Dictionary<string, long>();
+            _cache = new ValueCache(cacheDuration);
+            _rwLock = useThreadLocalStream ? null : new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+            _enableAdaptiveCache = enableAdaptiveCache;
+            _accessStats = enableAdaptiveCache ? new Dictionary<string, AccessStats>() : null;
+            _useThreadLocalStream = useThreadLocalStream;
+            _enableLazyLoading = enableLazyLoading;
+            _loadedKeys = enableLazyLoading ? new HashSet<string>() : null;
+            _lazyLoadBatchSize = lazyLoadBatchSize;
             
             if (_useThreadLocalStream)
             {
