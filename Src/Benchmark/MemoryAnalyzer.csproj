@@ -4,7 +4,7 @@
     <OutputType>Exe</OutputType>
     <TargetFramework>net8.0</TargetFramework>
     <RootNamespace>KVStreamer.Benchmark</RootNamespace>
-    <AssemblyName>KVStreamerBenchmark</AssemblyName>
+    <AssemblyName>MemoryAnalyzer</AssemblyName>
     <Nullable>disable</Nullable>
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
@@ -13,17 +13,13 @@
     <!-- 引用核心类文件 -->
     <Compile Include="..\KVStreamer.cs" Link="KVStreamer.cs" />
     <Compile Include="..\ValueCache.cs" Link="ValueCache.cs" />
-    <!-- 排除 MemoryAnalyzer -->
-    <Compile Remove="MemoryAnalyzer.cs" />
+    <!-- 排除 Benchmark 文件 -->
+    <Compile Remove="KVStreamerBenchmark.cs" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- 包含测试数据文件 -->
     <None Include="..\Example\chapter1.csv" CopyToOutputDirectory="PreserveNewest" Link="Src\Example\chapter1.csv" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="BenchmarkDotNet" Version="0.15.8" />
   </ItemGroup>
 
 </Project>
