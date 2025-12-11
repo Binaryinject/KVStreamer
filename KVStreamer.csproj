@@ -9,7 +9,7 @@
     
     <!-- NuGet Package Metadata -->
     <PackageId>KVStreamer</PackageId>
-    <Version>1.5.0</Version>
+    <Version>1.5.1</Version>
     <Authors>Binaryinject</Authors>
     <Company>Binaryinject</Company>
     <Product>KVStreamer</Product>
@@ -22,7 +22,22 @@
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <Copyright>Copyright (c) 2025 Binaryinject</Copyright>
-    <PackageReleaseNotes>Version 1.5.0 - P2 Optimizations (Generic Support):
+    <PackageReleaseNotes>Version 1.5.1 - Unity Support Enhancements:
+- Unified conditional compilation symbols for consistency
+- Added comprehensive Unity 6.3 support documentation
+- Clarified Brotli limitation across all Unity versions
+- Code organization improvements for better maintainability
+- UNITY_SUPPORT.md added with detailed compatibility matrix
+- Performance benchmarks for Unity 6.3 (Mono vs IL2CPP)
+- Best practices and configuration guides
+
+Unity 6.3 Status:
+- Mono backend: Full Span&lt;T&gt; support (40-60% less GC)
+- IL2CPP backend: ArrayPool optimization (30-50% less GC)
+- All features except Brotli fully supported
+- Adaptive cache, ThreadLocal, and generics work perfectly
+
+Version 1.5.0 - P2 Optimizations (Generic Support):
 - Added generic type support with KVStreamer&lt;TValue&gt;
 - IKVStreamer&lt;TValue&gt; interface for type-safe access
 - Built-in converters: Int32, Int64, Single, Double, Boolean

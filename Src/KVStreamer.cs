@@ -149,8 +149,8 @@ namespace FSTGame
             None = 0,
             /// <summary>GZip压缩（默认，支持所有平台包括Unity）</summary>
             GZip = 1,
-#if !UNITY_2019_1_OR_NEWER && NETCOREAPP3_0_OR_GREATER
-            /// <summary>Brotli压缩（更高压缩率，需要 .NET Core 3.0+，Unity 不支持 - BrotliStream 不在 .NET Standard 2.1 中）</summary>
+#if NETCOREAPP3_0_OR_GREATER && !UNITY_2019_1_OR_NEWER
+            /// <summary>Brotli压缩（更高压缩率，需要 .NET Core 3.0+）。注：Unity 所有版本均不支持，因为 BrotliStream 不在 .NET Standard 2.1 中。</summary>
             Brotli = 2
 #endif
         }
@@ -347,7 +347,7 @@ namespace FSTGame
                             }
                             break;
 
-#if !UNITY_2019_1_OR_NEWER && NETCOREAPP3_0_OR_GREATER
+#if NETCOREAPP3_0_OR_GREATER && !UNITY_2019_1_OR_NEWER
                         case CompressionAlgorithm.Brotli:
                             fs.WriteByte(MAGIC_BROTLI);
                             using (BrotliStream brotliStream = new BrotliStream(fs, CompressionMode.Compress, true))
@@ -409,7 +409,7 @@ namespace FSTGame
                 // GZip解压缩
                 actualData = DecompressGZip(binaryData, 1);
             }
-#if !UNITY_2019_1_OR_NEWER && NETCOREAPP3_0_OR_GREATER
+#if NETCOREAPP3_0_OR_GREATER && !UNITY_2019_1_OR_NEWER
             else if (magicByte == MAGIC_BROTLI)
             {
                 // Brotli解压缩
@@ -459,7 +459,7 @@ namespace FSTGame
             }
         }
 
-#if !UNITY_2019_1_OR_NEWER && NETCOREAPP3_0_OR_GREATER
+#if NETCOREAPP3_0_OR_GREATER && !UNITY_2019_1_OR_NEWER
         /// <summary>
         /// 解压缩Brotli数据
         /// </summary>
