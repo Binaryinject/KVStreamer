@@ -4,6 +4,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using System.Text;
 using System.Threading;
 
@@ -23,6 +24,8 @@ namespace FSTGame
         IEnumerable
     {
         private MemoryStream _dataStream;
+        private byte[] _rawData; // 存储原始数据供 ThreadLocal 使用
+        private ThreadLocal<MemoryStream> _threadLocalStream; // 线程本地 Stream
         private Dictionary<string, long> _keyOffsetMap;
         private ValueCache _cache;
         private ReaderWriterLockSlim _rwLock;
@@ -30,6 +33,18 @@ namespace FSTGame
         private const byte MAGIC_COMPRESSED = 0xC0; // GZip压缩标志
         private const byte MAGIC_UNCOMPRESSED = 0x00; // 未压缩标志
         private const byte MAGIC_BROTLI = 0xC1; // Brotli压缩标志 (.NET Core 3.0+)
+        
+        // 自适应缓存相关
+        private Dictionary<string, AccessStats> _accessStats;
+        private bool _enableAdaptiveCache;
+        private bool _useThreadLocalStream; // 是否使用线程本地Stream（无锁模式）
+        private const int HOT_KEY_THRESHOLD = 3; // 访问 3 次以上视为热点
+        
+        private class AccessStats
+        {
+            public int AccessCount { get; set; }
+            public long LastAccessTicks { get; set; }
+        }
 
         /// <summary>
         /// 构造函数
@@ -40,6 +55,49 @@ namespace FSTGame
             _keyOffsetMap = new Dictionary<string, long>();
             _cache = new ValueCache(cacheDuration);
             _rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+            _enableAdaptiveCache = false;
+            _accessStats = null;
+            _useThreadLocalStream = false;
+        }
+
+        /// <summary>
+        /// 构造函数（支持自适应缓存）
+        /// </summary>
+        /// <param name="cacheDuration">缓存持续时间（秒）</param>
+        /// <param name="enableAdaptiveCache">是否启用自适应缓存（自动缓存热点数据）</param>
+        public KVStreamer(float cacheDuration, bool enableAdaptiveCache)
+        {
+            _keyOffsetMap = new Dictionary<string, long>();
+            _cache = new ValueCache(cacheDuration);
+            _rwLock = new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+            _enableAdaptiveCache = enableAdaptiveCache;
+            _accessStats = enableAdaptiveCache ? new Dictionary<string, AccessStats>() : null;
+            _useThreadLocalStream = false;
+        }
+
+        /// <summary>
+        /// 构造函数（完整配置）
+        /// </summary>
+        /// <param name="cacheDuration">缓存持续时间（秒）</param>
+        /// <param name="enableAdaptiveCache">是否启用自适应缓存</param>
+        /// <param name="useThreadLocalStream">是否使用线程本地Stream（无锁模式，适合高并发场景）</param>
+        public KVStreamer(float cacheDuration, bool enableAdaptiveCache, bool useThreadLocalStream)
+        {
+            _keyOffsetMap = new Dictionary<string, long>();
+            _cache = new ValueCache(cacheDuration);
+            _rwLock = useThreadLocalStream ? null : new ReaderWriterLockSlim(LockRecursionPolicy.NoRecursion);
+            _enableAdaptiveCache = enableAdaptiveCache;
+            _accessStats = enableAdaptiveCache ? new Dictionary<string, AccessStats>() : null;
+            _useThreadLocalStream = useThreadLocalStream;
+            
+            if (_useThreadLocalStream)
+            {
+                _threadLocalStream = new ThreadLocal<MemoryStream>(() =>
+                {
+                    if (_rawData == null) return null;
+                    return new MemoryStream(_rawData, false);
+                }, trackAllValues: false);
+            }
         }
 
         /// <summary>
@@ -331,10 +389,20 @@ namespace FSTGame
             }
 
             // 创建内存流
-            _dataStream = new MemoryStream(actualData, false);
+            if (_useThreadLocalStream)
+            {
+                // 使用线程本地Stream模式，存储原始数据
+                _rawData = actualData;
+                // ThreadLocal 会自动创建每个线程的 MemoryStream
+            }
+            else
+            {
+                // 使用共享 Stream 模式
+                _dataStream = new MemoryStream(actualData, false);
+            }
 
             // 解析map头
-            ParseMapHeader();
+            ParseMapHeader(actualData);
         }
 
         /// <summary>
@@ -379,19 +447,19 @@ namespace FSTGame
         /// <summary>
         /// 解析Map头（优化版：使用 String.Intern 减少内存）
         /// </summary>
-        private void ParseMapHeader()
+        private void ParseMapHeader(byte[] data)
         {
             _keyOffsetMap.Clear();
 
-            _dataStream.Position = 0;
-            using (BinaryReader reader = new BinaryReader(_dataStream, Encoding.UTF8, true))
+            using (MemoryStream ms = new MemoryStream(data, false))
+            using (BinaryReader reader = new BinaryReader(ms, Encoding.UTF8, false))
             {
                 // 读取map头大小
                 int mapHeaderSize = reader.ReadInt32();
                 long mapEndPosition = mapHeaderSize;
 
                 // 读取所有key和offset
-                while (_dataStream.Position < mapEndPosition)
+                while (ms.Position < mapEndPosition)
                 {
                     int keyLength = reader.ReadInt32();
                     byte[] keyBytes = reader.ReadBytes(keyLength);
@@ -405,7 +473,7 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 通过Key获取Value（带缓存）
+        /// 通过Key获取Value（带缓存和自适应缓存）
         /// </summary>
         /// <param name="key">键</param>
         /// <returns>值，如果不存在返回null</returns>
@@ -417,7 +485,12 @@ namespace FSTGame
             // 先检查缓存
             string cachedValue = _cache.Get(key);
             if (cachedValue != null)
+            {
+                // 记录访问统计
+                if (_enableAdaptiveCache)
+                    RecordAccess(key);
                 return cachedValue;
+            }
 
             // 从文件流读取，使用TryGetValue避免两次查找
             if (!_keyOffsetMap.TryGetValue(key, out long offset))
@@ -425,13 +498,71 @@ namespace FSTGame
 
             string value = ReadValueAtOffset(offset);
 
-            // 加入缓存
+            // 加入缓存或自适应缓存
             if (value != null)
             {
-                _cache.Set(key, value);
+                if (_enableAdaptiveCache)
+                {
+                    RecordAccess(key);
+                    // 如果是热点数据，自动缓存
+                    if (IsHotKey(key))
+                    {
+                        _cache.Set(key, value);
+                    }
+                }
+                else
+                {
+                    _cache.Set(key, value);
+                }
             }
 
             return value;
+        }
+
+        /// <summary>
+        /// 记录键的访问统计
+        /// </summary>
+        private void RecordAccess(string key)
+        {
+            if (_accessStats == null)
+                return;
+
+            long currentTicks = DateTime.UtcNow.Ticks;
+            if (_accessStats.TryGetValue(key, out var stats))
+            {
+                stats.AccessCount++;
+                stats.LastAccessTicks = currentTicks;
+            }
+            else
+            {
+                _accessStats[key] = new AccessStats
+                {
+                    AccessCount = 1,
+                    LastAccessTicks = currentTicks
+                };
+            }
+        }
+
+        /// <summary>
+        /// 判断是否为热点数据
+        /// </summary>
+        private bool IsHotKey(string key)
+        {
+            if (_accessStats == null || !_accessStats.TryGetValue(key, out var stats))
+                return false;
+
+            return stats.AccessCount >= HOT_KEY_THRESHOLD;
+        }
+
+        /// <summary>
+        /// 获取访问统计信息（用于调试和分析）
+        /// </summary>
+        public Dictionary<string, int> GetAccessStatistics()
+        {
+            if (_accessStats == null)
+                return new Dictionary<string, int>();
+
+            return _accessStats.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.AccessCount);
         }
 
         /// <summary>
@@ -447,47 +578,94 @@ namespace FSTGame
         }
 
         /// <summary>
-        /// 从指定偏移量读取值（使用 ArrayPool 优化内存）
+        /// 从指定偏移量读取值（使用 ArrayPool 优化内存，支持无锁模式）
         /// </summary>
         private string ReadValueAtOffset(long offset)
         {
-            if (_dataStream == null)
-                return null;
-
-            _rwLock.EnterReadLock();
-            try
+            if (_useThreadLocalStream)
             {
-                _dataStream.Seek(offset, SeekOrigin.Begin);
+                // 无锁模式：使用线程本地 Stream
+                var stream = _threadLocalStream.Value;
+                if (stream == null)
+                    return null;
 
-                using (BinaryReader reader = new BinaryReader(_dataStream, Encoding.UTF8, true))
+                stream.Seek(offset, SeekOrigin.Begin);
+                using (BinaryReader reader = new BinaryReader(stream, Encoding.UTF8, true))
                 {
-                    int valueLength = reader.ReadInt32();
-                    
-                    // 小字符串直接读取，大字符串使用 ArrayPool
-                    if (valueLength <= 256)
-                    {
-                        byte[] buffer = reader.ReadBytes(valueLength);
-                        return Encoding.UTF8.GetString(buffer);
-                    }
-                    else
-                    {
-                        byte[] buffer = ArrayPool<byte>.Shared.Rent(valueLength);
-                        try
-                        {
-                            int bytesRead = reader.Read(buffer, 0, valueLength);
-                            return Encoding.UTF8.GetString(buffer, 0, bytesRead);
-                        }
-                        finally
-                        {
-                            ArrayPool<byte>.Shared.Return(buffer);
-                        }
-                    }
+                    return ReadValueFromReader(reader);
                 }
             }
-            finally
+            else
             {
-                _rwLock.ExitReadLock();
+                // 锁模式：使用读写锁
+                if (_dataStream == null)
+                    return null;
+
+                _rwLock.EnterReadLock();
+                try
+                {
+                    _dataStream.Seek(offset, SeekOrigin.Begin);
+                    using (BinaryReader reader = new BinaryReader(_dataStream, Encoding.UTF8, true))
+                    {
+                        return ReadValueFromReader(reader);
+                    }
+                }
+                finally
+                {
+                    _rwLock.ExitReadLock();
+                }
             }
+        }
+
+        /// <summary>
+        /// 从 BinaryReader 读取值（内部方法）
+        /// </summary>
+        private string ReadValueFromReader(BinaryReader reader)
+        {
+            int valueLength = reader.ReadInt32();
+            
+#if NETCOREAPP3_1_OR_GREATER && !UNITY_2019_1_OR_NEWER
+            // .NET Core 3.1+ 使用 Span<T> 优化
+            if (valueLength <= 1024) // 栈上分配限制提高到 1KB
+            {
+                Span<byte> buffer = stackalloc byte[valueLength];
+                reader.Read(buffer);
+                return Encoding.UTF8.GetString(buffer);
+            }
+            else
+            {
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(valueLength);
+                try
+                {
+                    int bytesRead = reader.Read(buffer.AsSpan(0, valueLength));
+                    return Encoding.UTF8.GetString(buffer.AsSpan(0, bytesRead));
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+            }
+#else
+            // 小字符串直接读取，大字符串使用 ArrayPool
+            if (valueLength <= 256)
+            {
+                byte[] buffer = reader.ReadBytes(valueLength);
+                return Encoding.UTF8.GetString(buffer);
+            }
+            else
+            {
+                byte[] buffer = ArrayPool<byte>.Shared.Rent(valueLength);
+                try
+                {
+                    int bytesRead = reader.Read(buffer, 0, valueLength);
+                    return Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                }
+                finally
+                {
+                    ArrayPool<byte>.Shared.Return(buffer);
+                }
+            }
+#endif
         }
 
         /// <summary>
@@ -909,6 +1087,7 @@ namespace FSTGame
                     CloseDataStream();
                     _cache?.Dispose();
                     _rwLock?.Dispose();
+                    _threadLocalStream?.Dispose();
                 }
                 _disposed = true;
             }
